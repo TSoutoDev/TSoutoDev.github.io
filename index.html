@@ -1711,9 +1711,25 @@ async function answerCall() {
   CALL.peerId = fromHash; CALL.isVideo = callType==='video'; CALL.state = 'active';
   document.getElementById('incoming-call-ui').style.display = 'none';
   document.getElementById('active-call-actions').style.display = 'flex';
+  document.getElementById('call-status').textContent = 'Aguardando permissao...';
+
+  // Get stream — single call with fallback
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: CALL.isVideo });
+  } catch(err) {
+    console.error('[answerCall]', err.name, err.message);
+    if (CALL.isVideo) {
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); CALL.isVideo = false; showToast('Camera indisponivel — so audio'); }
+      catch(e2) { showToast('Erro ' + e2.name + ': ' + e2.message); endCall(); return; }
+    } else {
+      showToast('Erro ' + err.name + ': ' + err.message); endCall(); return;
+    }
+  }
+  CALL.localStream = stream;
   document.getElementById('call-status').textContent = 'Conectando...';
   try {
-    CALL.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: CALL.isVideo });
+    if (CALL.isVideo) { document.getElementById('local-video').srcObject = CALL.localStream; document.getElementById('call-video-area').style.display = 'flex'; document.getElementById('btn-cam').style.display = 'flex'; }
     if (CALL.isVideo) {
       document.getElementById('local-video').srcObject = CALL.localStream;
       document.getElementById('call-video-area').style.display = 'flex';
@@ -1737,7 +1753,7 @@ async function answerCall() {
     const answer = await CALL.pc.createAnswer();
     await CALL.pc.setLocalDescription(answer);
     send({ type:'CALL_ANSWER', to:CALL.peerId, answer });
-  } catch(e) { showToast('Erro ao acessar microfone/camera'); endCall(); }
+  } catch(e) { showToast('Erro ao conectar: ' + e.message); endCall(); }
 }
 
 function rejectCall() {
