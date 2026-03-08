@@ -1629,18 +1629,18 @@ async function startCall(type) {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
   } catch(err) {
+    console.error('[CALL] getUserMedia error:', err.name, err.message);
     CALL.state = 'idle';
     document.getElementById('call-screen').classList.add('hidden');
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      showToast('Permissao negada. Va em Config > Navegador > Permissoes e ative o microfone.');
+      showToast('Permissao negada — ' + err.message);
     } else if (err.name === 'NotFoundError') {
-      showToast('Microfone nao encontrado neste dispositivo.');
+      showToast('Microfone nao encontrado — ' + err.message);
     } else if (err.name === 'OverconstrainedError') {
-      // Try audio only as fallback
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); CALL.isVideo = false; }
-      catch(e2) { showToast('Erro ao acessar microfone: ' + e2.message); return; }
+      catch(e2) { showToast('Erro microfone: ' + e2.name + ' — ' + e2.message); return; }
     } else {
-      showToast('Erro: ' + (err.message || 'nao foi possivel acessar o microfone'));
+      showToast('Erro ' + err.name + ': ' + err.message);
     }
     if (!stream) return;
   }
@@ -1648,6 +1648,7 @@ async function startCall(type) {
   document.getElementById('call-status').textContent = 'Chamando...';
   CALL.localStream = stream;
   try {
+    console.log('[CALL] Stream OK, tracks:', stream.getTracks().map(t=>t.kind+'/'+t.readyState).join(', '));
     if (isVideo) {
       document.getElementById('local-video').srcObject = CALL.localStream;
       document.getElementById('call-video-area').style.display = 'flex';
