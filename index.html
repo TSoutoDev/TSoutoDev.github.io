@@ -1657,13 +1657,21 @@ const CALL = {
 };
 
 const ICE_SERVERS = { iceServers: [
+  // Google STUN
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-]};
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  // Cloudflare STUN
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  // Metered TURN (multiple endpoints for reliability)
+  { urls: 'turn:openrelay.metered.ca:80',              username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',             username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  // Twilio fallback STUN
+  { urls: 'stun:global.stun.twilio.com:3478' },
+], iceCandidatePoolSize: 10 };
 
 async function startCall(type) {
   if (!S.currentChat) return;
@@ -1713,9 +1721,16 @@ async function startCall(type) {
     };
     CALL.pc.oniceconnectionstatechange = () => console.log('[CALL] ICE state:', CALL.pc.iceConnectionState);
     CALL.pc.onconnectionstatechange = () => {
-      console.log('[CALL] Connection state:', CALL.pc.connectionState);
-      if(CALL.pc?.connectionState==='connected') document.getElementById('call-status').textContent='Conectado';
-      if(CALL.pc?.connectionState==='failed') { showToast('Falha na conexao WebRTC'); endCall(); }
+      const st = CALL.pc?.connectionState;
+      console.log('[CALL] Connection state:', st);
+      if (st === 'connected') document.getElementById('call-status').textContent = 'Conectado';
+      if (st === 'failed') {
+        if (CALL.pc && CALL.state === 'active') {
+          CALL.pc.restartIce();
+          setTimeout(() => { if (CALL.pc?.connectionState === 'failed') { showToast('Falha na conexao'); endCall(); } }, 8000);
+        } else { showToast('Falha na conexao'); endCall(); }
+      }
+      if (st === 'disconnected') { document.getElementById('call-status').textContent = 'Reconectando...'; }
     };
     CALL.pc.ontrack = e => {
       console.log('[CALL] Remote track received:', e.track.kind);
@@ -1816,9 +1831,18 @@ async function answerCall() {
     };
     CALL.pc.oniceconnectionstatechange = () => console.log('[ANS] ICE state:', CALL.pc.iceConnectionState);
     CALL.pc.onconnectionstatechange = () => {
-      console.log('[ANS] Connection state:', CALL.pc.connectionState);
-      if(CALL.pc?.connectionState==='connected') document.getElementById('call-status').textContent='Conectado';
-      if(CALL.pc?.connectionState==='failed') { showToast('Falha na conexao WebRTC'); endCall(); }
+      const st = CALL.pc?.connectionState;
+      console.log('[ANS] Connection state:', st);
+      if (st === 'connected') document.getElementById('call-status').textContent = 'Conectado';
+      if (st === 'failed') {
+        console.log('[ANS] Connection failed, trying ICE restart...');
+        // Try ICE restart before giving up
+        if (CALL.pc && CALL.state === 'active') {
+          CALL.pc.restartIce();
+          setTimeout(() => { if (CALL.pc?.connectionState === 'failed') { showToast('Falha na conexao'); endCall(); } }, 8000);
+        } else { showToast('Falha na conexao'); endCall(); }
+      }
+      if (st === 'disconnected') { document.getElementById('call-status').textContent = 'Reconectando...'; }
     };
     CALL.pc.ontrack = e => {
       console.log('[ANS] Remote track received:', e.track.kind);
