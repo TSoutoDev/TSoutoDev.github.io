@@ -1701,12 +1701,31 @@ async function startCall(type) {
       document.getElementById('btn-cam').style.display = 'flex';
     }
     CALL.pc = new RTCPeerConnection(ICE_SERVERS);
+    console.log('[CALL] PeerConnection created');
     CALL.localStream.getTracks().forEach(t => CALL.pc.addTrack(t, CALL.localStream));
-    CALL.pc.onicecandidate = e => { if(e.candidate) send({type:'CALL_ICE', to:CALL.peerId, candidate:e.candidate}); };
-    CALL.pc.ontrack = e => { CALL.remoteStream = e.streams[0]; if(isVideo) document.getElementById('remote-video').srcObject = e.streams[0]; };
-    CALL.pc.onconnectionstatechange = () => { if(CALL.pc?.connectionState==='connected') document.getElementById('call-status').textContent='Conectado'; };
+    CALL.pc.onicecandidate = e => {
+      if(e.candidate) { console.log('[CALL] ICE candidate:', e.candidate.type, e.candidate.protocol); send({type:'CALL_ICE', to:CALL.peerId, candidate:e.candidate}); }
+      else { console.log('[CALL] ICE gathering complete'); }
+    };
+    CALL.pc.oniceconnectionstatechange = () => console.log('[CALL] ICE state:', CALL.pc.iceConnectionState);
+    CALL.pc.onconnectionstatechange = () => {
+      console.log('[CALL] Connection state:', CALL.pc.connectionState);
+      if(CALL.pc?.connectionState==='connected') document.getElementById('call-status').textContent='Conectado';
+      if(CALL.pc?.connectionState==='failed') { showToast('Falha na conexao WebRTC'); endCall(); }
+    };
+    CALL.pc.ontrack = e => {
+      console.log('[CALL] Remote track received:', e.track.kind);
+      CALL.remoteStream = e.streams[0];
+      if(isVideo) document.getElementById('remote-video').srcObject = e.streams[0];
+      else {
+        let ra = document.getElementById('remote-audio');
+        if(!ra){ ra=document.createElement('audio'); ra.id='remote-audio'; ra.autoplay=true; document.body.appendChild(ra); }
+        ra.srcObject = e.streams[0];
+      }
+    };
     const offer = await CALL.pc.createOffer();
     await CALL.pc.setLocalDescription(offer);
+    console.log('[CALL] Offer created, sending CALL_OFFER to', CALL.peerId.slice(0,8));
     const sent = send({ type:'CALL_OFFER', to:CALL.peerId, offer, callType:type, fromName:S.id.name, fromPhoto:S.id.photo||null });
     if (!sent) {
       showToast('Sem conexao com servidor. Tente novamente.');
@@ -1782,9 +1801,20 @@ async function answerCall() {
       document.getElementById('btn-cam').style.display = 'flex';
     }
     CALL.pc = new RTCPeerConnection(ICE_SERVERS);
+    console.log('[ANS] PeerConnection created, incoming offer type:', CALL.incoming.offer?.type);
     CALL.localStream.getTracks().forEach(t => CALL.pc.addTrack(t, CALL.localStream));
-    CALL.pc.onicecandidate = e => { if(e.candidate) send({type:'CALL_ICE', to:CALL.peerId, candidate:e.candidate}); };
+    CALL.pc.onicecandidate = e => {
+      if(e.candidate) { console.log('[ANS] ICE candidate:', e.candidate.type, e.candidate.protocol); send({type:'CALL_ICE', to:CALL.peerId, candidate:e.candidate}); }
+      else { console.log('[ANS] ICE gathering complete'); }
+    };
+    CALL.pc.oniceconnectionstatechange = () => console.log('[ANS] ICE state:', CALL.pc.iceConnectionState);
+    CALL.pc.onconnectionstatechange = () => {
+      console.log('[ANS] Connection state:', CALL.pc.connectionState);
+      if(CALL.pc?.connectionState==='connected') document.getElementById('call-status').textContent='Conectado';
+      if(CALL.pc?.connectionState==='failed') { showToast('Falha na conexao WebRTC'); endCall(); }
+    };
     CALL.pc.ontrack = e => {
+      console.log('[ANS] Remote track received:', e.track.kind);
       CALL.remoteStream = e.streams[0];
       if (CALL.isVideo) {
         document.getElementById('remote-video').srcObject = e.streams[0];
@@ -1794,10 +1824,11 @@ async function answerCall() {
         ra.srcObject = e.streams[0];
       }
     };
-    CALL.pc.onconnectionstatechange = () => { if(CALL.pc?.connectionState==='connected') document.getElementById('call-status').textContent='Conectado'; };
     await CALL.pc.setRemoteDescription(CALL.incoming.offer);
+    console.log('[ANS] Remote description set');
     const answer = await CALL.pc.createAnswer();
     await CALL.pc.setLocalDescription(answer);
+    console.log('[ANS] Answer created, sending CALL_ANSWER');
     send({ type:'CALL_ANSWER', to:CALL.peerId, answer });
   } catch(e) { showToast('Erro ao conectar: ' + e.message); endCall(); }
 }
