@@ -1921,34 +1921,34 @@ function toggleCam() {
 async function toggleSpeaker() {
   CALL.isSpeaker = !CALL.isSpeaker;
   document.getElementById('btn-speaker').classList.toggle('active', CALL.isSpeaker);
-  // On mobile, switch audio output between earpiece and speaker
+
   const ra = document.getElementById('remote-audio');
-  if (ra && ra.setSinkId) {
+  if (!ra) return;
+
+  if (CALL.isSpeaker) {
+    // Force speaker: use AudioContext to route stream to speakers
     try {
-      // setSinkId with empty string = default (earpiece), 'speaker' = loudspeaker
-      await ra.setSinkId(CALL.isSpeaker ? 'speaker' : '');
+      if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx = null; }
+      ra.srcObject = null; // detach from audio element (stops earpiece)
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      await ctx.resume();
+      const src = ctx.createMediaStreamSource(CALL.remoteStream);
+      src.connect(ctx.destination); // routes to speaker
+      CALL._speakerCtx = ctx;
+      showToast('🔊 Viva voz ativado');
     } catch(e) {
-      // setSinkId not supported on all browsers — fallback via AudioContext
-      showToast(CALL.isSpeaker ? 'Viva voz ativado' : 'Viva voz desativado');
+      console.warn('[SPEAKER]', e.message);
+      // Fallback: try setSinkId
+      if (ra.setSinkId) {
+        try { await ra.setSinkId(''); ra.srcObject = CALL.remoteStream; } catch(e2) {}
+      }
+      showToast('🔊 Viva voz ativado');
     }
   } else {
-    // Mobile Chrome workaround: re-route via AudioContext to force speaker
-    if (CALL.remoteStream) {
-      try {
-        if (CALL.isSpeaker) {
-          const ctx = new AudioContext();
-          const src = ctx.createMediaStreamSource(CALL.remoteStream);
-          const dst = ctx.createMediaStreamDestination();
-          src.connect(ctx.destination); // forces speaker on some mobile browsers
-          CALL._speakerCtx = ctx;
-        } else {
-          if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx = null; }
-          // Reassign to audio element to go back to earpiece
-          ra.srcObject = CALL.remoteStream;
-        }
-      } catch(e) { console.warn('Speaker toggle error:', e.message); }
-    }
-    showToast(CALL.isSpeaker ? '🔊 Viva voz ativado' : '🔇 Viva voz desativado');
+    // Back to earpiece: close AudioContext and use audio element
+    if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx = null; }
+    ra.srcObject = CALL.remoteStream;
+    showToast('🔈 Fone de ouvido');
   }
 }
 
@@ -2155,36 +2155,56 @@ function playNotifSound() {
 }
 
 function playPhoneRing() {
-  // Classic phone ring: two quick tones repeated
+  // Epic anime-style ringtone
   try {
     const ctx = getAudioCtx();
     const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.7, now);
+    master.connect(ctx.destination);
 
-    function tone(freq, start, duration, vol) {
+    function note(freq, start, dur, vol, type) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'sine';
+      osc.type = type || 'square';
+      osc.connect(gain); gain.connect(master);
       osc.frequency.setValueAtTime(freq, start);
       gain.gain.setValueAtTime(0, start);
       gain.gain.linearRampToValueAtTime(vol, start + 0.01);
-      gain.gain.setValueAtTime(vol, start + duration - 0.02);
-      gain.gain.linearRampToValueAtTime(0, start + duration);
-      osc.start(start);
-      osc.stop(start + duration);
+      gain.gain.setValueAtTime(vol, start + dur * 0.7);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+      osc.start(start); osc.stop(start + dur + 0.05);
     }
 
-    // Classic double ring pattern: ring-ring ... pause ... ring-ring
-    // First ring pair
-    tone(480, now + 0.0,  0.4, 0.35);
-    tone(440, now + 0.0,  0.4, 0.25);
-    tone(480, now + 0.5,  0.4, 0.35);
-    tone(440, now + 0.5,  0.4, 0.25);
-    // Gap of 1.5s then second ring pair
-    tone(480, now + 2.0,  0.4, 0.35);
-    tone(440, now + 2.0,  0.4, 0.25);
-    tone(480, now + 2.5,  0.4, 0.35);
-    tone(440, now + 2.5,  0.4, 0.25);
+    function chord(freqs, start, dur, vol, type) {
+      freqs.forEach(f => note(f, start, dur, vol / freqs.length, type));
+    }
+
+    // ── Anime epic intro: DA-DA-DA-DAAA ──
+    // Rising motif
+    note(523, now + 0.00, 0.12, 0.6, 'sawtooth'); // C5
+    note(659, now + 0.14, 0.12, 0.6, 'sawtooth'); // E5
+    note(784, now + 0.28, 0.12, 0.6, 'sawtooth'); // G5
+    note(1047,now + 0.42, 0.30, 0.7, 'sawtooth'); // C6 — held
+
+    // Power chord hit
+    chord([523,659,784], now + 0.80, 0.18, 0.8, 'square');
+
+    // Second phrase — higher urgency
+    note(784, now + 1.05, 0.10, 0.6, 'sawtooth');
+    note(880, now + 1.17, 0.10, 0.6, 'sawtooth');
+    note(988, now + 1.29, 0.10, 0.6, 'sawtooth');
+    note(1175,now + 1.41, 0.35, 0.75,'sawtooth'); // D6 — climax
+
+    // Final power chord
+    chord([523,784,1047], now + 1.85, 0.25, 0.85, 'square');
+
+    // Punchy bass layer
+    note(131, now + 0.00, 0.08, 0.5, 'sine'); // C3 bass hit
+    note(131, now + 0.80, 0.08, 0.5, 'sine');
+    note(98,  now + 1.05, 0.08, 0.5, 'sine');
+    note(131, now + 1.85, 0.10, 0.5, 'sine');
+
   } catch(e) {}
 }
 
@@ -2194,7 +2214,7 @@ function startRingtone() {
   // Repeat every 4 seconds (matches the ring pattern duration)
   CALL._ringInterval = setInterval(() => {
     playPhoneRing();
-  }, 4000);
+  }, 3200);
   // Stop after 30s if not answered
   setTimeout(() => {
     if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval = null; }
