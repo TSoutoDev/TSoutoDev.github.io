@@ -670,6 +670,46 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 // ══════════════════════════════════════════════════════════
 //  Nexo — WebSocket relay + AES-256 + confirmacao de leitura
 // ══════════════════════════════════════════════════════════
+// ── DIAGNOSTIC LOG (must be first) ───────────────────
+const LOGS = [];
+function addLog(type, msg) {
+  const t = new Date().toTimeString().slice(0,8);
+  LOGS.push('['+t+']['+type+'] '+msg);
+  if (LOGS.length > 300) LOGS.shift();
+  const el = document.getElementById('log-content');
+  const modal = document.getElementById('log-modal');
+  if (el && modal && modal.style.display !== 'none') {
+    el.textContent = LOGS.join('\n'); el.scrollTop = el.scrollHeight;
+  }
+}
+(function() {
+  const ce = console.error.bind(console);
+  const cl = console.log.bind(console);
+  const cw = console.warn.bind(console);
+  console.error = (...a) => { addLog('ERR', a.join(' ')); ce(...a); };
+  console.log   = (...a) => { addLog('LOG', a.join(' ')); cl(...a); };
+  console.warn  = (...a) => { addLog('WRN', a.join(' ')); cw(...a); };
+  window.onerror = (msg,src,line,col,err) => addLog('EXC', msg+' L'+line+(err?' — '+err.stack:''));
+  window.onunhandledrejection = e => addLog('REJ', String(e.reason?.stack||e.reason||e));
+})();
+function showLogs() {
+  const modal = document.getElementById('log-modal');
+  modal.style.display = 'flex';
+  const el = document.getElementById('log-content');
+  el.textContent = LOGS.length ? LOGS.join('\n') : 'Nenhum log ainda.';
+  el.scrollTop = el.scrollHeight;
+}
+function copyLogs() {
+  const text = LOGS.length ? LOGS.join('\n') : 'Sem logs';
+  navigator.clipboard.writeText(text).then(()=>showToast('Copiado!')).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=text;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); showToast('Copiado!');
+  });
+}
+function clearLogs() { LOGS.length=0; const el=document.getElementById('log-content'); if(el) el.textContent=''; }
+
+
 
 // ── STATE ──────────────────────────────────────────────
 const S = {
@@ -1979,45 +2019,6 @@ function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-
-// ── DIAGNOSTIC LOG ────────────────────────────────────
-const LOGS = [];
-const _origConsoleError = console.error.bind(console);
-const _origConsoleLog = console.log.bind(console);
-console.error = (...args) => { addLog('ERR', args.join(' ')); _origConsoleError(...args); };
-console.log   = (...args) => { addLog('LOG', args.join(' ')); _origConsoleLog(...args); };
-window.onerror = (msg, src, line) => addLog('EXC', msg + ' L' + line);
-window.onunhandledrejection = e => addLog('REJ', String(e.reason));
-
-function addLog(type, msg) {
-  const t = new Date().toTimeString().slice(0,8);
-  LOGS.push('[' + t + '][' + type + '] ' + msg);
-  if (LOGS.length > 200) LOGS.shift();
-  const el = document.getElementById('log-content');
-  if (el && document.getElementById('log-modal').style.display !== 'none') {
-    el.textContent = LOGS.join('\n');
-    el.scrollTop = el.scrollHeight;
-  }
-}
-
-function showLogs() {
-  const modal = document.getElementById('log-modal');
-  modal.style.display = 'flex';
-  document.getElementById('log-content').textContent = LOGS.length ? LOGS.join('\n') : 'Nenhum log ainda. Tente fazer uma chamada.';
-}
-
-function copyLogs() {
-  const text = LOGS.join('\n');
-  navigator.clipboard.writeText(text).then(()=>showToast('Logs copiados!')).catch(()=>{
-    // fallback
-    const ta = document.createElement('textarea');
-    ta.value = text; document.body.appendChild(ta);
-    ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); showToast('Logs copiados!');
-  });
-}
-
-function clearLogs() { LOGS.length=0; document.getElementById('log-content').textContent=''; }
 
 function playNotifSound() {
   // Short notification beep (for messages)
