@@ -1832,13 +1832,25 @@ async function answerCall() {
       showToast('Erro: offer invalido — type:' + CALL.incoming.offer?.type + ' sdp:' + (!!CALL.incoming.offer?.sdp));
       endCall(); return;
     }
-    await CALL.pc.setRemoteDescription(new RTCSessionDescription(CALL.incoming.offer));
-    console.log('[ANS] Remote description set');
+    try {
+      await CALL.pc.setRemoteDescription(new RTCSessionDescription(CALL.incoming.offer));
+      console.log('[ANS] setRemoteDescription OK');
+    } catch(sdpErr) {
+      console.error('[ANS] setRemoteDescription FAILED:', sdpErr.name, sdpErr.message, '| sdp start:', CALL.incoming.offer?.sdp?.slice(0,60));
+      addLog('ERR', '[ANS] SDP FAILED: ' + sdpErr.name + ' ' + sdpErr.message + ' sdp:' + CALL.incoming.offer?.sdp?.slice(0,60));
+      showToast('Erro SDP: ' + sdpErr.name + ' — ' + sdpErr.message);
+      endCall(); return;
+    }
     const answer = await CALL.pc.createAnswer();
     await CALL.pc.setLocalDescription(answer);
     console.log('[ANS] Answer created, sending CALL_ANSWER');
     send({ type:'CALL_ANSWER', to:CALL.peerId, answer });
-  } catch(e) { showToast('Erro ao conectar: ' + e.message); endCall(); }
+  } catch(e) {
+    console.error('[ANS] catch:', e.name, e.message);
+    addLog('ERR', '[ANS] catch: ' + e.name + ' ' + e.message);
+    showToast('Erro: ' + e.name + ' — ' + e.message);
+    endCall();
+  }
 }
 
 function rejectCall() {
