@@ -953,9 +953,9 @@ function handlePacket(pkt) {
       if (CALL.pc && CALL.state==='calling') {
         CALL.state='active';
         if (CALL._callTimeout) { clearTimeout(CALL._callTimeout); CALL._callTimeout=null; }
-        console.log('[CALL] answer received, type:', pkt.answer?.type);
+        console.log('[CALL] answer received, type:', pkt.answer?.type, 'sdp len:', pkt.answer?.sdp?.length);
         if (!pkt.answer?.type || !pkt.answer?.sdp) { showToast('Resposta invalida'); endCall(); return; }
-        CALL.pc.setRemoteDescription(new RTCSessionDescription(pkt.answer));
+        CALL.pc.setRemoteDescription({ type: pkt.answer.type, sdp: pkt.answer.sdp });
         document.getElementById('call-status').textContent = 'Conectado';
       }
       break;
@@ -1827,19 +1827,20 @@ async function answerCall() {
         ra.srcObject = e.streams[0];
       }
     };
-    console.log('[ANS] offer object:', JSON.stringify(CALL.incoming.offer).slice(0,100));
-    if (!CALL.incoming.offer || !CALL.incoming.offer.type || !CALL.incoming.offer.sdp) {
-      showToast('Erro: offer invalido — type:' + CALL.incoming.offer?.type + ' sdp:' + (!!CALL.incoming.offer?.sdp));
-      endCall(); return;
+    // offer is plain JSON object from server — use directly
+    const offerObj = CALL.incoming.offer;
+    console.log('[ANS] offer type:', offerObj?.type, 'sdp len:', offerObj?.sdp?.length);
+    if (!offerObj || !offerObj.type || !offerObj.sdp) {
+      addLog('ERR', '[ANS] offer invalido type:' + offerObj?.type + ' sdp:' + offerObj?.sdp?.length);
+      showToast('Offer invalido'); endCall(); return;
     }
     try {
-      await CALL.pc.setRemoteDescription(new RTCSessionDescription(CALL.incoming.offer));
+      await CALL.pc.setRemoteDescription({ type: offerObj.type, sdp: offerObj.sdp });
       console.log('[ANS] setRemoteDescription OK');
     } catch(sdpErr) {
-      console.error('[ANS] setRemoteDescription FAILED:', sdpErr.name, sdpErr.message, '| sdp start:', CALL.incoming.offer?.sdp?.slice(0,60));
-      addLog('ERR', '[ANS] SDP FAILED: ' + sdpErr.name + ' ' + sdpErr.message + ' sdp:' + CALL.incoming.offer?.sdp?.slice(0,60));
-      showToast('Erro SDP: ' + sdpErr.name + ' — ' + sdpErr.message);
-      endCall(); return;
+      console.error('[ANS] setRemoteDescription FAILED:', sdpErr.name, sdpErr.message);
+      addLog('ERR', '[ANS] SDP FAIL: ' + sdpErr.name + ' ' + sdpErr.message);
+      showToast('Erro SDP: ' + sdpErr.name); endCall(); return;
     }
     const answer = await CALL.pc.createAnswer();
     await CALL.pc.setLocalDescription(answer);
