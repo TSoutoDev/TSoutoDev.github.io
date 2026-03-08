@@ -1759,7 +1759,8 @@ function showCallScreen(peerId, title, status) {
 }
 
 function showIncomingCall(fromHash, fromName, fromPhoto, callType) {
-  CALL.incoming = { fromHash, fromName, fromPhoto, callType };
+  // Preserve offer field — only update display fields
+  CALL.incoming = { ...CALL.incoming, fromHash, fromName, fromPhoto, callType };
   CALL.state = 'incoming';
   const el = document.getElementById('call-screen');
   document.getElementById('call-name').textContent = fromName;
