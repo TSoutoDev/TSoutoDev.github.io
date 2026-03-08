@@ -1782,6 +1782,8 @@ async function answerCall() {
   document.getElementById('incoming-call-ui').style.display = 'none';
   document.getElementById('active-call-actions').style.display = 'flex';
   document.getElementById('call-status').textContent = 'Aguardando permissao...';
+  // Stop ringtone immediately when answering
+  if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval = null; }
 
   // Get stream — single call with fallback
   let stream;
