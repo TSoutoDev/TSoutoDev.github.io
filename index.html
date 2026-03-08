@@ -797,13 +797,18 @@ function initWS(url, onReady) {
 
   ws.onopen = () => {
     S.wsReady = true;
+    S.wsRetryCount = 0;
     ws.send(JSON.stringify({ type:'REGISTER', id: S.id.hashId }));
     setStatus('online');
     clearInterval(S.retryTimer);
+    // Aggressive ping every 15s to keep connection alive on mobile
     S.retryTimer = setInterval(() => {
-      if (ws.readyState !== WebSocket.OPEN) return;
+      if (ws.readyState !== WebSocket.OPEN) {
+        clearInterval(S.retryTimer);
+        return;
+      }
       ws.send(JSON.stringify({ type:'PING' }));
-    }, 25000);
+    }, 15000);
     if (onReady) onReady();
   };
 
@@ -816,8 +821,10 @@ function initWS(url, onReady) {
     S.wsReady = false;
     setStatus('offline');
     clearInterval(S.retryTimer);
-    // Reconnect after 4s
-    setTimeout(() => { if (S.id) initWS(S.id.serverUrl); }, 4000);
+    // Exponential backoff reconnect
+    const delay = Math.min((S.wsRetryCount||0) * 1000 + 1000, 8000);
+    S.wsRetryCount = (S.wsRetryCount||0) + 1;
+    S.wsReconnectTimer = setTimeout(() => { if (S.id) initWS(S.id.serverUrl); }, delay);
   };
 
   ws.onerror = () => {
@@ -948,6 +955,17 @@ function handlePacket(pkt) {
     case 'CALL_OFFER': {
       const cf = S.contacts[from] || {};
       console.log('[PKT] CALL_OFFER from', from.slice(0,8), 'offer type:', pkt.offer?.type, 'sdp len:', pkt.offer?.sdp?.length||0);
+      // If offer is older than 30s, show missed call notification instead
+      const offerAge = Date.now() - (pkt.ts || 0);
+      if (offerAge > 30000) {
+        const callerName = pkt.fromName || cf.name || from.slice(0,8);
+        showToast('📵 Chamada perdida de ' + callerName);
+        // Add missed call message to conversation
+        if (!S.convs[from]) S.convs[from] = [];
+        S.convs[from].push({ id: 'mc_'+Date.now(), from, content:'📵 Chamada perdida', ts: pkt.ts||Date.now(), status:'received', type:'missed' });
+        saveDB(); updateConvList();
+        break;
+      }
       CALL.pendingOffer = { type: pkt.offer.type, sdp: pkt.offer.sdp }; // store separately
       console.log('[PKT] pendingOffer saved, type:', CALL.pendingOffer.type, 'sdp len:', CALL.pendingOffer.sdp.length);
       showIncomingCall(from, pkt.fromName||cf.name||from.slice(0,8), pkt.fromPhoto||cf.photo||null, pkt.callType||'audio');
@@ -1748,7 +1766,7 @@ async function startCall(type) {
     const offer = await CALL.pc.createOffer();
     await CALL.pc.setLocalDescription(offer);
     console.log('[CALL] Offer created, sending CALL_OFFER to', CALL.peerId.slice(0,8));
-    const sent = send({ type:'CALL_OFFER', to:CALL.peerId, offer, callType:type, fromName:S.id.name, fromPhoto:S.id.photo||null });
+    const sent = send({ type:'CALL_OFFER', to:CALL.peerId, offer, callType:type, fromName:S.id.name, fromPhoto:S.id.photo||null, ts:Date.now() });
     if (!sent) {
       showToast('Sem conexao com servidor. Tente novamente.');
       endCall(); return;
@@ -2128,6 +2146,17 @@ function removePin() {
 
 // Lock on visibility change (app goes to background)
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && S.id) {
+    // App came back to foreground — check connection
+    if (!S.wsReady || !S.ws || S.ws.readyState !== WebSocket.OPEN) {
+      console.log('[WS] App resumed, reconnecting...');
+      clearTimeout(S.wsReconnectTimer);
+      initWS(S.id.serverUrl);
+    } else {
+      // Still connected — re-register to flush any missed packets
+      S.ws.send(JSON.stringify({ type:'REGISTER', id: S.id.hashId }));
+    }
+  }
   if (document.hidden) return;
   if (LOCK.enabled) { showLock(); tryBiometric(); }
 });
