@@ -631,6 +631,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button class="call-btn cam" id="btn-cam" onclick="toggleCam()" title="Camera" style="display:none;">
       <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
     </button>
+    <button class="call-btn" id="btn-speaker" onclick="toggleSpeaker()" title="Viva voz">
+      <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+    </button>
   </div>
 </div>
 
@@ -1891,7 +1894,9 @@ function endCall() {
   if (CALL.pc) { CALL.pc.close(); CALL.pc = null; }
   if (CALL.localStream) { CALL.localStream.getTracks().forEach(t=>t.stop()); CALL.localStream = null; }
   if (CALL.peerId && CALL.state==='active') send({ type:'CALL_END', to:CALL.peerId });
-  CALL.state='idle'; CALL.peerId=null; CALL.incoming=null; CALL.pendingOffer=null;
+  CALL.state='idle'; CALL.peerId=null; CALL.incoming=null; CALL.pendingOffer=null; CALL.isSpeaker=false;
+  if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx=null; }
+  const spBtn=document.getElementById('btn-speaker'); if(spBtn) spBtn.classList.remove('active');
   if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval=null; }
   if (CALL._callTimeout) { clearTimeout(CALL._callTimeout); CALL._callTimeout=null; }
   const _ra=document.getElementById('remote-audio'); if(_ra) _ra.srcObject=null;
@@ -1911,6 +1916,40 @@ function toggleCam() {
   CALL.isCamOff = !CALL.isCamOff;
   CALL.localStream?.getVideoTracks().forEach(t => t.enabled = !CALL.isCamOff);
   document.getElementById('btn-cam').classList.toggle('active', CALL.isCamOff);
+}
+
+async function toggleSpeaker() {
+  CALL.isSpeaker = !CALL.isSpeaker;
+  document.getElementById('btn-speaker').classList.toggle('active', CALL.isSpeaker);
+  // On mobile, switch audio output between earpiece and speaker
+  const ra = document.getElementById('remote-audio');
+  if (ra && ra.setSinkId) {
+    try {
+      // setSinkId with empty string = default (earpiece), 'speaker' = loudspeaker
+      await ra.setSinkId(CALL.isSpeaker ? 'speaker' : '');
+    } catch(e) {
+      // setSinkId not supported on all browsers — fallback via AudioContext
+      showToast(CALL.isSpeaker ? 'Viva voz ativado' : 'Viva voz desativado');
+    }
+  } else {
+    // Mobile Chrome workaround: re-route via AudioContext to force speaker
+    if (CALL.remoteStream) {
+      try {
+        if (CALL.isSpeaker) {
+          const ctx = new AudioContext();
+          const src = ctx.createMediaStreamSource(CALL.remoteStream);
+          const dst = ctx.createMediaStreamDestination();
+          src.connect(ctx.destination); // forces speaker on some mobile browsers
+          CALL._speakerCtx = ctx;
+        } else {
+          if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx = null; }
+          // Reassign to audio element to go back to earpiece
+          ra.srcObject = CALL.remoteStream;
+        }
+      } catch(e) { console.warn('Speaker toggle error:', e.message); }
+    }
+    showToast(CALL.isSpeaker ? '🔊 Viva voz ativado' : '🔇 Viva voz desativado');
+  }
 }
 
 // ── EMOJI PICKER ──────────────────────────────────────
