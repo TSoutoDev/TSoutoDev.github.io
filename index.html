@@ -945,7 +945,8 @@ function handlePacket(pkt) {
     case 'CALL_OFFER': {
       const cf = S.contacts[from] || {};
       console.log('[PKT] CALL_OFFER from', from.slice(0,8), 'offer type:', pkt.offer?.type, 'sdp len:', pkt.offer?.sdp?.length||0);
-      CALL.incoming = { fromHash:from, fromName:pkt.fromName||cf.name||from.slice(0,8), fromPhoto:pkt.fromPhoto||cf.photo||null, callType:pkt.callType||'audio', offer:pkt.offer };
+      CALL.pendingOffer = { type: pkt.offer.type, sdp: pkt.offer.sdp }; // store separately
+      console.log('[PKT] pendingOffer saved, type:', CALL.pendingOffer.type, 'sdp len:', CALL.pendingOffer.sdp.length);
       showIncomingCall(from, pkt.fromName||cf.name||from.slice(0,8), pkt.fromPhoto||cf.photo||null, pkt.callType||'audio');
       break;
     }
@@ -1828,9 +1829,9 @@ async function answerCall() {
         ra.srcObject = e.streams[0];
       }
     };
-    // offer is plain JSON object from server — use directly
-    const offerObj = CALL.incoming.offer;
-    console.log('[ANS] offer type:', offerObj?.type, 'sdp len:', offerObj?.sdp?.length);
+    // Use pendingOffer stored separately to avoid CALL.incoming overwrite
+    const offerObj = CALL.pendingOffer;
+    console.log('[ANS] offerObj type:', offerObj?.type, 'sdp len:', offerObj?.sdp?.length);
     if (!offerObj || !offerObj.type || !offerObj.sdp) {
       addLog('ERR', '[ANS] offer invalido type:' + offerObj?.type + ' sdp:' + offerObj?.sdp?.length);
       showToast('Offer invalido'); endCall(); return;
@@ -1864,7 +1865,7 @@ function endCall() {
   if (CALL.pc) { CALL.pc.close(); CALL.pc = null; }
   if (CALL.localStream) { CALL.localStream.getTracks().forEach(t=>t.stop()); CALL.localStream = null; }
   if (CALL.peerId && CALL.state==='active') send({ type:'CALL_END', to:CALL.peerId });
-  CALL.state='idle'; CALL.peerId=null; CALL.incoming=null;
+  CALL.state='idle'; CALL.peerId=null; CALL.incoming=null; CALL.pendingOffer=null;
   if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval=null; }
   if (CALL._callTimeout) { clearTimeout(CALL._callTimeout); CALL._callTimeout=null; }
   const _ra=document.getElementById('remote-audio'); if(_ra) _ra.srcObject=null;
