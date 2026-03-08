@@ -2131,5 +2131,18 @@ function requestNotifPermission() {
   }
 })();
 </script>
+<!-- LOG MODAL -->
+<div id="log-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;flex-direction:column;padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <span style="color:#fff;font-weight:700;font-size:16px;">Log de Diagnostico</span>
+    <div style="display:flex;gap:8px;">
+      <button onclick="copyLogs()" style="background:#00e676;color:#000;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;">Copiar</button>
+      <button onclick="document.getElementById('log-modal').style.display='none'" style="background:#333;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;">Fechar</button>
+    </div>
+  </div>
+  <div id="log-content" style="flex:1;overflow-y:auto;background:#111;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:#00e676;white-space:pre-wrap;word-break:break-all;"></div>
+  <button onclick="clearLogs()" style="margin-top:8px;background:#222;color:#666;border:none;border-radius:8px;padding:8px;font-size:12px;cursor:pointer;width:100%;">Limpar logs</button>
+</div>
+<audio id="remote-audio" autoplay style="display:none"></audio>
 </body>
 </html>
