@@ -944,6 +944,7 @@ function handlePacket(pkt) {
 
     case 'CALL_OFFER': {
       const cf = S.contacts[from] || {};
+      console.log('[PKT] CALL_OFFER from', from.slice(0,8), 'offer type:', pkt.offer?.type, 'sdp len:', pkt.offer?.sdp?.length||0);
       CALL.incoming = { fromHash:from, fromName:pkt.fromName||cf.name||from.slice(0,8), fromPhoto:pkt.fromPhoto||cf.photo||null, callType:pkt.callType||'audio', offer:pkt.offer };
       showIncomingCall(from, pkt.fromName||cf.name||from.slice(0,8), pkt.fromPhoto||cf.photo||null, pkt.callType||'audio');
       break;
@@ -952,6 +953,8 @@ function handlePacket(pkt) {
       if (CALL.pc && CALL.state==='calling') {
         CALL.state='active';
         if (CALL._callTimeout) { clearTimeout(CALL._callTimeout); CALL._callTimeout=null; }
+        console.log('[CALL] answer received, type:', pkt.answer?.type);
+        if (!pkt.answer?.type || !pkt.answer?.sdp) { showToast('Resposta invalida'); endCall(); return; }
         CALL.pc.setRemoteDescription(new RTCSessionDescription(pkt.answer));
         document.getElementById('call-status').textContent = 'Conectado';
       }
@@ -1824,7 +1827,12 @@ async function answerCall() {
         ra.srcObject = e.streams[0];
       }
     };
-    await CALL.pc.setRemoteDescription(CALL.incoming.offer);
+    console.log('[ANS] offer object:', JSON.stringify(CALL.incoming.offer).slice(0,100));
+    if (!CALL.incoming.offer || !CALL.incoming.offer.type || !CALL.incoming.offer.sdp) {
+      showToast('Erro: offer invalido — type:' + CALL.incoming.offer?.type + ' sdp:' + (!!CALL.incoming.offer?.sdp));
+      endCall(); return;
+    }
+    await CALL.pc.setRemoteDescription(new RTCSessionDescription(CALL.incoming.offer));
     console.log('[ANS] Remote description set');
     const answer = await CALL.pc.createAnswer();
     await CALL.pc.setLocalDescription(answer);
