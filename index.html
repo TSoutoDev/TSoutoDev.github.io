@@ -664,7 +664,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 </div>
 
 <!-- GROUP CALL SCREEN -->
-<div id="gc-screen" class="hidden" style="position:fixed;inset:0;background:#080C14;z-index:2000;display:flex;flex-direction:column;align-items:center;">
+<div id="gc-screen" class="hidden" style="position:fixed;inset:0;background:#080C14;z-index:2000;flex-direction:column;align-items:center;display:none;">
   <div style="width:100%;padding:16px;display:flex;justify-content:space-between;align-items:center;">
     <span id="gc-title" style="color:#fff;font-weight:700;font-size:16px;">Chamada em grupo</span>
     <span id="gc-status" style="color:var(--accent);font-size:13px;">Conectando...</span>
@@ -2414,6 +2414,7 @@ function gcUpdateStatus() {
 function showGCScreen() {
   const scr = document.getElementById('gc-screen');
   scr.classList.remove('hidden');
+  scr.style.display = 'flex';
   document.getElementById('gc-incoming').style.display = 'none';
   document.getElementById('gc-actions').style.display = 'flex';
   document.getElementById('gc-avatar-grid').innerHTML = '';
@@ -2442,6 +2443,7 @@ function showGCScreen() {
 function showGCIncoming(fromHash, fromName, fromPhoto, isVideo) {
   const scr = document.getElementById('gc-screen');
   scr.classList.remove('hidden');
+  scr.style.display = 'flex';
   document.getElementById('gc-incoming').style.display = 'flex';
   document.getElementById('gc-actions').style.display = 'none';
   document.getElementById('gc-incoming-name').textContent = fromName + ' está chamando';
@@ -2490,7 +2492,8 @@ function endGroupCall() {
   GC.peers = {};
   if (GC.localStream) { GC.localStream.getTracks().forEach(t=>t.stop()); GC.localStream=null; }
   GC.active=false; GC.roomId=null; GC.incoming=null;
-  document.getElementById('gc-screen').classList.add('hidden');
+  const gcScr = document.getElementById('gc-screen');
+  gcScr.classList.add('hidden'); gcScr.style.display = 'none';
   document.getElementById('gc-local-video').srcObject = null;
 }
 
