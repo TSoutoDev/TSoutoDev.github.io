@@ -452,6 +452,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <div id="chat-status" class="chat-header-status">—</div>
       </div>
     </div>
+    <button class="icon-btn" onclick="startGroupCall()" title="Chamada em grupo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
     <button class="icon-btn" onclick="startCall('audio')" title="Chamada de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
     <button class="icon-btn" onclick="startCall('video')" title="Chamada de video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
     <button class="icon-btn" onclick="openChatMenu()"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
@@ -662,6 +663,46 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 </div>
 
+<!-- GROUP CALL SCREEN -->
+<div id="gc-screen" class="hidden" style="position:fixed;inset:0;background:#080C14;z-index:2000;display:flex;flex-direction:column;align-items:center;">
+  <div style="width:100%;padding:16px;display:flex;justify-content:space-between;align-items:center;">
+    <span id="gc-title" style="color:#fff;font-weight:700;font-size:16px;">Chamada em grupo</span>
+    <span id="gc-status" style="color:var(--accent);font-size:13px;">Conectando...</span>
+  </div>
+  <!-- Video grid -->
+  <div id="gc-video-grid" style="display:none;flex:1;width:100%;padding:8px;gap:6px;display:grid;grid-template-columns:1fr 1fr;"></div>
+  <!-- Audio avatars grid -->
+  <div id="gc-avatar-grid" style="flex:1;width:100%;padding:16px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:16px;"></div>
+  <!-- Local video small -->
+  <video id="gc-local-video" autoplay playsinline muted style="display:none;position:absolute;bottom:120px;right:12px;width:90px;height:120px;object-fit:cover;border-radius:12px;border:2px solid var(--accent);z-index:10;"></video>
+  <!-- Incoming group call UI -->
+  <div id="gc-incoming" style="display:none;flex-direction:column;align-items:center;gap:16px;padding:24px;">
+    <div id="gc-incoming-avatar" class="call-avatar">?</div>
+    <div id="gc-incoming-name" style="color:#fff;font-size:18px;font-weight:700;"></div>
+    <div style="color:var(--muted);font-size:14px;">Chamada em grupo</div>
+    <div style="display:flex;gap:24px;margin-top:8px;">
+      <button class="call-btn" style="background:#22c55e;" onclick="answerGroupCall()">
+        <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      </button>
+      <button class="call-btn end" onclick="rejectGroupCall()">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <!-- Active call actions -->
+  <div id="gc-actions" style="display:none;width:100%;padding:16px 24px;display:flex;justify-content:center;gap:20px;padding-bottom:32px;">
+    <button class="call-btn mute" id="gc-btn-mute" onclick="gcToggleMute()" title="Mudo">
+      <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+    <button class="call-btn end" onclick="endGroupCall()" title="Encerrar">
+      <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-3.41-2.6m-2.59-3.59a19.5 19.5 0 0 1-2.6-3.41 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+    </button>
+    <button class="call-btn cam" id="gc-btn-cam" onclick="gcToggleCam()" title="Camera" style="display:none;">
+      <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    </button>
+  </div>
+</div>
+
 <!-- LOCK SCREEN -->
 <div id="lock-screen" class="hidden">
   <div class="lock-icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -851,6 +892,12 @@ function initWS(url, onReady) {
       ws.send(JSON.stringify({ type:'PING' }));
     }, 15000);
     if (onReady) onReady();
+    // Keep Render server awake with HTTP ping every 10min
+    if (!S._keepAliveTimer) {
+      S._keepAliveTimer = setInterval(() => {
+        fetch('https://nexo-relay.onrender.com/health').catch(()=>{});
+      }, 10 * 60 * 1000);
+    }
   };
 
   ws.onmessage = (e) => {
@@ -1031,6 +1078,16 @@ function handlePacket(pkt) {
       showToast('Chamada recusada'); endCall(); break;
     case 'CALL_END':
       showToast('Chamada encerrada'); endCall(); break;
+
+    case 'GC_INVITE':
+    case 'GC_JOINED':
+    case 'GC_OFFER':
+    case 'GC_ANSWER':
+    case 'GC_ICE':
+    case 'GC_REJECT':
+    case 'GC_END':
+      handleGCPacket(pkt, from);
+      break;
   }
 }
 
@@ -1718,6 +1775,18 @@ const CALL = {
   incoming: null, state: 'idle' // idle | calling | incoming | active
 };
 
+// ── GROUP CALL ─────────────────────────────────────────
+const GC = {
+  active: false,
+  roomId: null,
+  isVideo: false,
+  isMuted: false,
+  isCamOff: false,
+  localStream: null,
+  peers: {}, // peerId -> RTCPeerConnection
+  incoming: null // { roomId, fromHash, fromName, isVideo }
+};
+
 const ICE_SERVERS = { iceServers: [
   // Google STUN
   { urls: 'stun:stun.l.google.com:19302' },
@@ -2207,6 +2276,292 @@ let audioCtx = null;
 function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
+}
+
+// ══════════════════════════════════════════════════════════
+//  GROUP CALL — WebRTC mesh, up to 4 participants
+// ══════════════════════════════════════════════════════════
+
+function gcRoomId() {
+  // Room = sorted hash of initiator + current chat (stable for both sides)
+  return [S.id.hashId, S.currentChat].sort().join('_GC_');
+}
+
+async function startGroupCall() {
+  if (!S.currentChat) return;
+  if (!S.wsReady) { showToast('Sem conexao'); return; }
+  if (GC.active || CALL.state !== 'idle') { showToast('Ja em chamada'); return; }
+
+  // Ask voice or video
+  const isVideo = confirm('Chamada de vídeo? (Cancelar = só voz)');
+  GC.isVideo = isVideo;
+  GC.roomId = gcRoomId();
+  GC.active = true;
+
+  // Get media
+  try {
+    GC.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
+  } catch(e) {
+    showToast('Erro microfone: ' + e.message); GC.active = false; return;
+  }
+
+  showGCScreen();
+
+  // Invite current contact
+  const c = S.contacts[S.currentChat];
+  send({ type:'GC_INVITE', to:S.currentChat, roomId:GC.roomId, isVideo, fromName:S.id.name, fromPhoto:S.id.photo||null, ts:Date.now() });
+
+  // Create PC for this peer
+  await gcCreatePeer(S.currentChat, true);
+  document.getElementById('gc-status').textContent = 'Chamando ' + (c?.name||'...');
+}
+
+async function gcCreatePeer(peerId, isInitiator) {
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  GC.peers[peerId] = pc;
+
+  // Add local tracks
+  if (GC.localStream) GC.localStream.getTracks().forEach(t => pc.addTrack(t, GC.localStream));
+
+  pc.onicecandidate = e => {
+    if (e.candidate) send({ type:'GC_ICE', to:peerId, roomId:GC.roomId, candidate:e.candidate });
+  };
+
+  pc.ontrack = e => {
+    gcAddRemoteStream(peerId, e.streams[0]);
+  };
+
+  pc.onconnectionstatechange = () => {
+    console.log('[GC] peer', peerId.slice(0,8), 'state:', pc.connectionState);
+    if (pc.connectionState === 'connected') gcUpdateStatus();
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      gcRemovePeer(peerId);
+    }
+  };
+
+  if (isInitiator) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send({ type:'GC_OFFER', to:peerId, roomId:GC.roomId, offer:{type:offer.type,sdp:offer.sdp}, isVideo:GC.isVideo, fromName:S.id.name });
+  }
+
+  return pc;
+}
+
+function gcAddRemoteStream(peerId, stream) {
+  const c = S.contacts[peerId] || {};
+  const name = c.name || peerId.slice(0,8);
+
+  if (GC.isVideo) {
+    // Video tile
+    let tile = document.getElementById('gc-tile-'+peerId);
+    if (!tile) {
+      tile = document.createElement('div');
+      tile.id = 'gc-tile-' + peerId;
+      tile.style.cssText = 'position:relative;background:#111;border-radius:12px;overflow:hidden;aspect-ratio:3/4;';
+      const vid = document.createElement('video');
+      vid.autoplay = true; vid.playsinline = true;
+      vid.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      vid.srcObject = stream;
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'position:absolute;bottom:6px;left:8px;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.8);';
+      lbl.textContent = name;
+      tile.appendChild(vid); tile.appendChild(lbl);
+      document.getElementById('gc-video-grid').appendChild(tile);
+    }
+    document.getElementById('gc-video-grid').style.display = 'grid';
+    document.getElementById('gc-avatar-grid').style.display = 'none';
+  } else {
+    // Audio avatar
+    let av = document.getElementById('gc-av-'+peerId);
+    if (!av) {
+      av = document.createElement('div');
+      av.id = 'gc-av-' + peerId;
+      av.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;';
+      const circle = document.createElement('div');
+      circle.style.cssText = 'width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:var(--accent);';
+      if (c.photo) { circle.style.backgroundImage=`url(${c.photo})`; circle.style.backgroundSize='cover'; circle.textContent=''; }
+      else circle.textContent = name[0].toUpperCase();
+      const nm = document.createElement('div');
+      nm.style.cssText = 'color:#fff;font-size:12px;font-weight:600;';
+      nm.textContent = name;
+      av.appendChild(circle); av.appendChild(nm);
+      document.getElementById('gc-avatar-grid').appendChild(av);
+      // Audio element
+      const audio = document.createElement('audio');
+      audio.autoplay = true; audio.srcObject = stream;
+      av.appendChild(audio);
+    }
+  }
+}
+
+function gcRemovePeer(peerId) {
+  if (GC.peers[peerId]) { GC.peers[peerId].close(); delete GC.peers[peerId]; }
+  document.getElementById('gc-tile-'+peerId)?.remove();
+  document.getElementById('gc-av-'+peerId)?.remove();
+  gcUpdateStatus();
+  if (Object.keys(GC.peers).length === 0) {
+    showToast('Todos sairam da chamada');
+    endGroupCall();
+  }
+}
+
+function gcUpdateStatus() {
+  const n = Object.keys(GC.peers).length;
+  document.getElementById('gc-status').textContent = n > 0 ? (n+1) + ' participantes' : 'Sozinho na sala...';
+}
+
+function showGCScreen() {
+  const scr = document.getElementById('gc-screen');
+  scr.classList.remove('hidden');
+  document.getElementById('gc-incoming').style.display = 'none';
+  document.getElementById('gc-actions').style.display = 'flex';
+  document.getElementById('gc-avatar-grid').innerHTML = '';
+  document.getElementById('gc-video-grid').innerHTML = '';
+  document.getElementById('gc-video-grid').style.display = 'none';
+
+  // Add myself to avatar grid
+  const meDiv = document.createElement('div');
+  meDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;';
+  const circle = document.createElement('div');
+  circle.style.cssText = 'width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:var(--accent);';
+  if (S.id.photo) { circle.style.backgroundImage=`url(${S.id.photo})`; circle.style.backgroundSize='cover'; }
+  else circle.textContent = (S.id.name||'Eu')[0].toUpperCase();
+  const nm = document.createElement('div');
+  nm.style.cssText = 'color:var(--accent);font-size:12px;font-weight:600;'; nm.textContent = 'Você';
+  meDiv.appendChild(circle); meDiv.appendChild(nm);
+  document.getElementById('gc-avatar-grid').appendChild(meDiv);
+
+  if (GC.isVideo) {
+    document.getElementById('gc-local-video').style.display = 'block';
+    document.getElementById('gc-local-video').srcObject = GC.localStream;
+    document.getElementById('gc-btn-cam').style.display = 'flex';
+  }
+}
+
+function showGCIncoming(fromHash, fromName, fromPhoto, isVideo) {
+  const scr = document.getElementById('gc-screen');
+  scr.classList.remove('hidden');
+  document.getElementById('gc-incoming').style.display = 'flex';
+  document.getElementById('gc-actions').style.display = 'none';
+  document.getElementById('gc-incoming-name').textContent = fromName + ' está chamando';
+  const av = document.getElementById('gc-incoming-avatar');
+  if (fromPhoto) { av.style.backgroundImage=`url(${fromPhoto})`; av.textContent=''; }
+  else { av.style.backgroundImage=''; av.textContent=(fromName||'?')[0].toUpperCase(); }
+  startRingtone();
+}
+
+async function answerGroupCall() {
+  if (!GC.incoming) return;
+  if (CALL.state !== 'idle') { showToast('Ja em chamada individual'); return; }
+  if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval = null; }
+
+  const { roomId, fromHash, isVideo } = GC.incoming;
+  GC.roomId = roomId; GC.isVideo = isVideo; GC.active = true;
+
+  try {
+    GC.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
+  } catch(e) {
+    if (isVideo) {
+      try { GC.localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false }); GC.isVideo=false; }
+      catch(e2) { showToast('Erro microfone'); GC.active=false; return; }
+    } else { showToast('Erro microfone'); GC.active=false; return; }
+  }
+
+  showGCScreen();
+  // Create peer connection back to caller (they will send offer via GC_OFFER)
+  await gcCreatePeer(fromHash, false);
+  // Signal we joined
+  send({ type:'GC_JOINED', to:fromHash, roomId, fromName:S.id.name });
+}
+
+function rejectGroupCall() {
+  if (GC.incoming) send({ type:'GC_REJECT', to:GC.incoming.fromHash, roomId:GC.incoming.roomId });
+  if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval = null; }
+  GC.incoming = null;
+  document.getElementById('gc-screen').classList.add('hidden');
+}
+
+function endGroupCall() {
+  Object.keys(GC.peers).forEach(pid => {
+    send({ type:'GC_END', to:pid, roomId:GC.roomId });
+    if (GC.peers[pid]) GC.peers[pid].close();
+  });
+  GC.peers = {};
+  if (GC.localStream) { GC.localStream.getTracks().forEach(t=>t.stop()); GC.localStream=null; }
+  GC.active=false; GC.roomId=null; GC.incoming=null;
+  document.getElementById('gc-screen').classList.add('hidden');
+  document.getElementById('gc-local-video').srcObject = null;
+}
+
+function gcToggleMute() {
+  GC.isMuted = !GC.isMuted;
+  GC.localStream?.getAudioTracks().forEach(t => t.enabled = !GC.isMuted);
+  document.getElementById('gc-btn-mute').classList.toggle('active', GC.isMuted);
+}
+
+function gcToggleCam() {
+  GC.isCamOff = !GC.isCamOff;
+  GC.localStream?.getVideoTracks().forEach(t => t.enabled = !GC.isCamOff);
+  document.getElementById('gc-btn-cam').classList.toggle('active', GC.isCamOff);
+}
+
+// ── GROUP CALL PACKET HANDLERS ─────────────────────────
+async function handleGCPacket(pkt, from) {
+  switch(pkt.type) {
+
+    case 'GC_INVITE':
+      if (GC.active || CALL.state !== 'idle') {
+        send({ type:'GC_REJECT', to:from, roomId:pkt.roomId }); return;
+      }
+      GC.incoming = { roomId:pkt.roomId, fromHash:from, fromName:pkt.fromName, isVideo:pkt.isVideo };
+      showGCIncoming(from, pkt.fromName||from.slice(0,8), pkt.fromPhoto, pkt.isVideo);
+      break;
+
+    case 'GC_JOINED':
+      // Someone joined — create offer for them
+      if (GC.active && GC.roomId === pkt.roomId) {
+        await gcCreatePeer(from, true);
+        gcUpdateStatus();
+      }
+      break;
+
+    case 'GC_OFFER':
+      if (!GC.active || !GC.peers[from]) {
+        // Late join — create peer
+        GC.active = true;
+        await gcCreatePeer(from, false);
+      }
+      const pc = GC.peers[from];
+      if (pc) {
+        await pc.setRemoteDescription({ type:pkt.offer.type, sdp:pkt.offer.sdp });
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        send({ type:'GC_ANSWER', to:from, roomId:GC.roomId, answer:{type:answer.type,sdp:answer.sdp} });
+      }
+      break;
+
+    case 'GC_ANSWER':
+      if (GC.peers[from]) {
+        await GC.peers[from].setRemoteDescription({ type:pkt.answer.type, sdp:pkt.answer.sdp });
+      }
+      break;
+
+    case 'GC_ICE':
+      if (GC.peers[from] && pkt.candidate) {
+        GC.peers[from].addIceCandidate(new RTCIceCandidate(pkt.candidate)).catch(()=>{});
+      }
+      break;
+
+    case 'GC_REJECT':
+      showToast('Chamada recusada');
+      if (Object.keys(GC.peers).length === 0) endGroupCall();
+      break;
+
+    case 'GC_END':
+      gcRemovePeer(from);
+      break;
+  }
 }
 
 function playNotifSound() {
