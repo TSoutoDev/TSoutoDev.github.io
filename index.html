@@ -2287,13 +2287,36 @@ function gcRoomId() {
   return [S.id.hashId, S.currentChat].sort().join('_GC_');
 }
 
-async function startGroupCall() {
+function startGroupCall() {
   if (!S.currentChat) return;
   if (!S.wsReady) { showToast('Sem conexao'); return; }
   if (GC.active || CALL.state !== 'idle') { showToast('Ja em chamada'); return; }
+  // Show type selector modal
+  showGCTypeModal();
+}
 
-  // Ask voice or video
-  const isVideo = confirm('Chamada de vídeo? (Cancelar = só voz)');
+function showGCTypeModal() {
+  const overlay = document.createElement('div');
+  overlay.id = 'gc-type-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border-radius:16px;padding:24px;width:280px;display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:16px;font-weight:700;color:var(--text);text-align:center;">Chamada em grupo</div>
+      <button onclick="doStartGroupCall(false)" style="padding:12px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Só voz
+      </button>
+      <button onclick="doStartGroupCall(true)" style="padding:12px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        Voz e vídeo
+      </button>
+      <button onclick="document.getElementById('gc-type-modal').remove()" style="padding:10px;background:transparent;border:none;color:var(--muted);font-size:13px;cursor:pointer;">Cancelar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function doStartGroupCall(isVideo) {
+  document.getElementById('gc-type-modal')?.remove();
   GC.isVideo = isVideo;
   GC.roomId = gcRoomId();
   GC.active = true;
