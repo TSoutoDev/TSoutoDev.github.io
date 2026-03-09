@@ -1117,8 +1117,8 @@ function handlePacket(pkt) {
     case 'GC_ICE':
     case 'GC_REJECT':
     case 'GC_END':
-    case 'GC_PEERS':
-    case 'GC_NEW_PEER':
+    case 'GC_MEMBERS':
+    case 'GC_HELLO':
       handleGCPacket(pkt, from);
       break;
   }
@@ -2373,32 +2373,45 @@ async function doStartGroupCall(isVideo) {
 }
 
 async function gcCreatePeer(peerId, isInitiator) {
-  const pc = new RTCPeerConnection(ICE_SERVERS);
+  // Don't create duplicate
+  if (GC.peers[peerId]) return GC.peers[peerId];
+
+  console.log('[GC] createPeer', peerId.slice(0,8), isInitiator ? 'OFFER' : 'ANSWER');
+  const pc = new RTCPeerConnection({...ICE_SERVERS, iceCandidatePoolSize:10});
   GC.peers[peerId] = pc;
 
-  // Add local tracks
-  if (GC.localStream) GC.localStream.getTracks().forEach(t => pc.addTrack(t, GC.localStream));
+  // Add all local tracks
+  if (GC.localStream) {
+    GC.localStream.getTracks().forEach(t => pc.addTrack(t, GC.localStream));
+  }
 
   pc.onicecandidate = e => {
-    if (e.candidate) send({ type:'GC_ICE', to:peerId, roomId:GC.roomId, candidate:e.candidate });
+    if (e.candidate) {
+      send({ type:'GC_ICE', to:peerId, roomId:GC.roomId, candidate:e.candidate });
+    }
   };
 
   pc.ontrack = e => {
-    gcAddRemoteStream(peerId, e.streams[0]);
+    console.log('[GC] ontrack from', peerId.slice(0,8));
+    const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+    gcAddRemoteStream(peerId, stream);
   };
 
   pc.onconnectionstatechange = () => {
-    console.log('[GC] peer', peerId.slice(0,8), 'state:', pc.connectionState);
+    console.log('[GC]', peerId.slice(0,8), pc.connectionState);
     if (pc.connectionState === 'connected') gcUpdateStatus();
-    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+    if (pc.connectionState === 'failed') {
+      console.log('[GC] connection failed, removing', peerId.slice(0,8));
       gcRemovePeer(peerId);
     }
   };
 
   if (isInitiator) {
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer({ offerToReceiveAudio:true, offerToReceiveVideo:GC.isVideo });
     await pc.setLocalDescription(offer);
-    send({ type:'GC_OFFER', to:peerId, roomId:GC.roomId, offer:{type:offer.type,sdp:offer.sdp}, isVideo:GC.isVideo, fromName:S.id.name });
+    send({ type:'GC_OFFER', to:peerId, roomId:GC.roomId,
+      offer:{type:offer.type, sdp:offer.sdp},
+      isVideo:GC.isVideo, fromName:S.id.name });
   }
 
   return pc;
@@ -2663,6 +2676,17 @@ function gcToggleCam() {
 }
 
 // ── GROUP CALL PACKET HANDLERS ─────────────────────────
+// Protocol (simple, no loops):
+// 1. A invites B  →  B answers  →  B sends GC_JOINED to A
+// 2. A receives GC_JOINED from B:
+//    - A creates offer → sends GC_OFFER to B
+//    - A sends GC_MEMBERS (list of everyone in room) to B
+// 3. B receives GC_MEMBERS → for each peer X:
+//    - B creates PC for X (answerer side)
+//    - B sends GC_HELLO to X ("I'm here, please send me an offer")
+// 4. X receives GC_HELLO from B → creates offer → sends GC_OFFER to B
+// 5. Normal offer/answer/ice flow between each pair
+
 async function handleGCPacket(pkt, from) {
   switch(pkt.type) {
 
@@ -2674,74 +2698,79 @@ async function handleGCPacket(pkt, from) {
       showGCIncoming(from, pkt.fromName||from.slice(0,8), pkt.fromPhoto, pkt.isVideo);
       break;
 
-    case 'GC_JOINED':
-      // Someone joined the room
+    case 'GC_JOINED': {
+      // B just joined — I (whoever receives this) create offer to B
       if (!GC.active || GC.roomId !== pkt.roomId) break;
-      {
-        // 1. Tell the new joiner about ALL existing peers so they connect to everyone
-        const existingPeers = Object.keys(GC.peers);
-        if (existingPeers.length > 0) {
-          send({ type:'GC_PEERS', to:from, roomId:GC.roomId,
-            peers: existingPeers.map(pid => ({
-              hashId: pid,
-              name: S.contacts[pid]?.name || pid.slice(0,8),
-              photo: S.contacts[pid]?.photo || null
-            }))
-          });
+      console.log('[GC] GC_JOINED from', from.slice(0,8));
+
+      // Send list of ALL current members to the new joiner (so they connect to everyone)
+      const members = Object.keys(GC.peers).filter(p => p !== from);
+      send({ type:'GC_MEMBERS', to:from, roomId:GC.roomId,
+        members: members.map(pid => ({
+          hashId: pid,
+          name: S.contacts[pid]?.name || pid.slice(0,8),
+          photo: S.contacts[pid]?.photo || null
+        }))
+      });
+
+      // Now create offer to the new joiner
+      await gcCreatePeer(from, true);
+      gcUpdateStatus();
+      break;
+    }
+
+    case 'GC_MEMBERS': {
+      // I just joined and received the member list — connect to each existing member
+      if (!GC.active || GC.roomId !== pkt.roomId) break;
+      console.log('[GC] GC_MEMBERS:', (pkt.members||[]).map(m=>m.hashId.slice(0,8)));
+      for (const m of (pkt.members||[])) {
+        if (!GC.peers[m.hashId]) {
+          // Create PC as answerer — send GC_HELLO so they send us an offer
+          await gcCreatePeer(m.hashId, false);
+          send({ type:'GC_HELLO', to:m.hashId, roomId:GC.roomId,
+            fromName:S.id.name, fromPhoto:S.id.photo||null });
         }
-        // 2. Tell ALL existing peers about the new joiner
-        existingPeers.forEach(pid => {
-          send({ type:'GC_NEW_PEER', to:pid, roomId:GC.roomId,
-            hashId:from, name:pkt.fromName||from.slice(0,8), photo:pkt.fromPhoto||null });
-        });
-        // 3. Create connection from host to new joiner
+      }
+      break;
+    }
+
+    case 'GC_HELLO': {
+      // A peer I don't know yet is ready — create offer to them
+      if (!GC.active || GC.roomId !== pkt.roomId) break;
+      console.log('[GC] GC_HELLO from', from.slice(0,8));
+      if (!GC.peers[from]) {
         await gcCreatePeer(from, true);
         gcUpdateStatus();
       }
       break;
+    }
 
-    case 'GC_PEERS':
-      // Received list of existing peers — connect to each one
-      if (!GC.active || GC.roomId !== pkt.roomId) break;
-      for (const peer of (pkt.peers||[])) {
-        if (!GC.peers[peer.hashId]) {
-          // We are the answerer — they will send us an offer
-          await gcCreatePeer(peer.hashId, false);
-          // Tell them we're ready so they send offer
-          send({ type:'GC_JOINED', to:peer.hashId, roomId:GC.roomId, fromName:S.id.name, fromPhoto:S.id.photo||null });
-        }
-      }
-      break;
-
-    case 'GC_NEW_PEER':
-      // A new peer joined the room — connect to them (we are initiator)
-      if (!GC.active || GC.roomId !== pkt.roomId) break;
-      if (!GC.peers[pkt.hashId]) {
-        await gcCreatePeer(pkt.hashId, true);
-        gcUpdateStatus();
-      }
-      break;
-
-    case 'GC_OFFER':
-      if (!GC.active || !GC.peers[from]) {
-        // Late join — create peer
-        GC.active = true;
-        await gcCreatePeer(from, false);
-      }
+    case 'GC_OFFER': {
+      console.log('[GC] GC_OFFER from', from.slice(0,8));
+      if (!GC.active) break;
+      // Create PC if not exists (answerer)
+      if (!GC.peers[from]) await gcCreatePeer(from, false);
       const pc = GC.peers[from];
-      if (pc) {
+      if (!pc) break;
+      try {
         await pc.setRemoteDescription({ type:pkt.offer.type, sdp:pkt.offer.sdp });
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        send({ type:'GC_ANSWER', to:from, roomId:GC.roomId, answer:{type:answer.type,sdp:answer.sdp} });
-      }
+        send({ type:'GC_ANSWER', to:from, roomId:GC.roomId,
+          answer:{type:answer.type, sdp:answer.sdp} });
+      } catch(e) { console.error('[GC] offer error', e); }
       break;
+    }
 
-    case 'GC_ANSWER':
-      if (GC.peers[from]) {
-        await GC.peers[from].setRemoteDescription({ type:pkt.answer.type, sdp:pkt.answer.sdp });
+    case 'GC_ANSWER': {
+      console.log('[GC] GC_ANSWER from', from.slice(0,8));
+      const pc2 = GC.peers[from];
+      if (pc2) {
+        try { await pc2.setRemoteDescription({ type:pkt.answer.type, sdp:pkt.answer.sdp }); }
+        catch(e) { console.error('[GC] answer error', e); }
       }
       break;
+    }
 
     case 'GC_ICE':
       if (GC.peers[from] && pkt.candidate) {
