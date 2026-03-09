@@ -1117,6 +1117,8 @@ function handlePacket(pkt) {
     case 'GC_ICE':
     case 'GC_REJECT':
     case 'GC_END':
+    case 'GC_PEERS':
+    case 'GC_NEW_PEER':
       handleGCPacket(pkt, from);
       break;
   }
@@ -2572,10 +2574,8 @@ async function answerGroupCall() {
   }
 
   showGCScreen();
-  // Create peer connection back to caller (they will send offer via GC_OFFER)
-  await gcCreatePeer(fromHash, false);
-  // Signal we joined
-  send({ type:'GC_JOINED', to:fromHash, roomId, fromName:S.id.name });
+  // Signal we joined to the caller — they will tell us about other peers
+  send({ type:'GC_JOINED', to:fromHash, roomId, fromName:S.id.name, fromPhoto:S.id.photo||null });
 }
 
 function rejectGroupCall() {
@@ -2675,9 +2675,49 @@ async function handleGCPacket(pkt, from) {
       break;
 
     case 'GC_JOINED':
-      // Someone joined — create offer for them
-      if (GC.active && GC.roomId === pkt.roomId) {
+      // Someone joined the room
+      if (!GC.active || GC.roomId !== pkt.roomId) break;
+      {
+        // 1. Tell the new joiner about ALL existing peers so they connect to everyone
+        const existingPeers = Object.keys(GC.peers);
+        if (existingPeers.length > 0) {
+          send({ type:'GC_PEERS', to:from, roomId:GC.roomId,
+            peers: existingPeers.map(pid => ({
+              hashId: pid,
+              name: S.contacts[pid]?.name || pid.slice(0,8),
+              photo: S.contacts[pid]?.photo || null
+            }))
+          });
+        }
+        // 2. Tell ALL existing peers about the new joiner
+        existingPeers.forEach(pid => {
+          send({ type:'GC_NEW_PEER', to:pid, roomId:GC.roomId,
+            hashId:from, name:pkt.fromName||from.slice(0,8), photo:pkt.fromPhoto||null });
+        });
+        // 3. Create connection from host to new joiner
         await gcCreatePeer(from, true);
+        gcUpdateStatus();
+      }
+      break;
+
+    case 'GC_PEERS':
+      // Received list of existing peers — connect to each one
+      if (!GC.active || GC.roomId !== pkt.roomId) break;
+      for (const peer of (pkt.peers||[])) {
+        if (!GC.peers[peer.hashId]) {
+          // We are the answerer — they will send us an offer
+          await gcCreatePeer(peer.hashId, false);
+          // Tell them we're ready so they send offer
+          send({ type:'GC_JOINED', to:peer.hashId, roomId:GC.roomId, fromName:S.id.name, fromPhoto:S.id.photo||null });
+        }
+      }
+      break;
+
+    case 'GC_NEW_PEER':
+      // A new peer joined the room — connect to them (we are initiator)
+      if (!GC.active || GC.roomId !== pkt.roomId) break;
+      if (!GC.peers[pkt.hashId]) {
+        await gcCreatePeer(pkt.hashId, true);
         gcUpdateStatus();
       }
       break;
