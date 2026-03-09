@@ -286,6 +286,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* CALL SCREEN */
 #call-screen{position:fixed;inset:0;z-index:8000;background:linear-gradient(160deg,#0a1628 0%,#080C14 100%);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:60px 32px 50px;}
 #call-screen.hidden{display:none;}
+.gc-slot{position:relative;background:#0d1420;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
+.gc-slot-empty{background:#0a0e18;}
+.gc-av-circle{width:64px;height:64px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--accent);background-size:cover;background-position:center;flex-shrink:0;}
+.gc-empty-circle{border-color:var(--border);color:var(--border);font-size:28px;background:transparent;}
+.gc-slot-label{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.8);}
 .call-avatar{width:100px;height:100px;border-radius:50%;background:var(--bg3);border:3px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:700;color:var(--accent);background-size:cover;background-position:center;}
 .call-name{font-size:26px;font-weight:700;margin-top:16px;}
 .call-status{font-size:15px;color:var(--muted);margin-top:6px;}
@@ -664,19 +669,41 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 </div>
 
 <!-- GROUP CALL SCREEN -->
-<div id="gc-screen" class="hidden" style="position:fixed;inset:0;background:#080C14;z-index:2000;flex-direction:column;align-items:center;display:none;">
-  <div style="width:100%;padding:16px;display:flex;justify-content:space-between;align-items:center;">
-    <span id="gc-title" style="color:#fff;font-weight:700;font-size:16px;">Chamada em grupo</span>
-    <span id="gc-status" style="color:var(--accent);font-size:13px;">Conectando...</span>
+<div id="gc-screen" class="hidden" style="position:fixed;inset:0;background:#060a10;z-index:2000;flex-direction:column;display:none;">
+
+  <!-- Header -->
+  <div style="position:absolute;top:0;left:0;right:0;z-index:10;padding:env(safe-area-inset-top,12px) 16px 12px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(6,10,16,.9),transparent);">
+    <span style="color:#fff;font-weight:700;font-size:15px;">Chamada em grupo</span>
+    <span id="gc-status" style="color:var(--accent);font-size:12px;font-weight:600;">Conectando...</span>
   </div>
-  <!-- Video grid -->
-  <div id="gc-video-grid" style="display:none;flex:1;width:100%;padding:8px;gap:6px;display:grid;grid-template-columns:1fr 1fr;"></div>
-  <!-- Audio avatars grid -->
-  <div id="gc-avatar-grid" style="flex:1;width:100%;padding:16px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:16px;"></div>
-  <!-- Local video small -->
-  <video id="gc-local-video" autoplay playsinline muted style="display:none;position:absolute;bottom:120px;right:12px;width:90px;height:120px;object-fit:cover;border-radius:12px;border:2px solid var(--accent);z-index:10;"></video>
-  <!-- Incoming group call UI -->
-  <div id="gc-incoming" style="display:none;flex-direction:column;align-items:center;gap:16px;padding:24px;">
+
+  <!-- FIXED 4-SLOT GRID — always 2×2 -->
+  <div id="gc-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;width:100%;padding-top:56px;padding-bottom:88px;">
+    <!-- Slot 0 — local (você) -->
+    <div id="gc-slot-0" class="gc-slot" data-label="Você">
+      <video id="gc-slot-0-vid" autoplay playsinline muted style="display:none;width:100%;height:100%;object-fit:cover;"></video>
+      <div id="gc-slot-0-av" class="gc-av-circle"></div>
+      <div class="gc-slot-label">Você</div>
+    </div>
+    <!-- Slot 1 -->
+    <div id="gc-slot-1" class="gc-slot gc-slot-empty">
+      <div class="gc-av-circle gc-empty-circle">+</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
+    </div>
+    <!-- Slot 2 -->
+    <div id="gc-slot-2" class="gc-slot gc-slot-empty">
+      <div class="gc-av-circle gc-empty-circle">+</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
+    </div>
+    <!-- Slot 3 -->
+    <div id="gc-slot-3" class="gc-slot gc-slot-empty">
+      <div class="gc-av-circle gc-empty-circle">+</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
+    </div>
+  </div>
+
+  <!-- Incoming group call overlay -->
+  <div id="gc-incoming" style="display:none;position:absolute;inset:0;background:rgba(6,10,16,.95);flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:20;">
     <div id="gc-incoming-avatar" class="call-avatar">?</div>
     <div id="gc-incoming-name" style="color:#fff;font-size:18px;font-weight:700;"></div>
     <div style="color:var(--muted);font-size:14px;">Chamada em grupo</div>
@@ -689,18 +716,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       </button>
     </div>
   </div>
-  <!-- Active call actions -->
-  <div id="gc-actions" style="display:none;width:100%;padding:16px 24px;display:flex;justify-content:center;gap:20px;padding-bottom:32px;">
+
+  <!-- Bottom actions bar -->
+  <div id="gc-actions" style="display:none;position:absolute;bottom:0;left:0;right:0;padding:12px 24px env(safe-area-inset-bottom,16px);display:flex;justify-content:center;gap:16px;background:linear-gradient(to top,rgba(6,10,16,.95),transparent);">
     <button class="call-btn mute" id="gc-btn-mute" onclick="gcToggleMute()" title="Mudo">
       <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-    </button>
-    <button class="call-btn end" onclick="endGroupCall()" title="Encerrar">
-      <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-3.41-2.6m-2.59-3.59a19.5 19.5 0 0 1-2.6-3.41 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
     </button>
     <button class="call-btn" onclick="gcShowAddContact()" title="Adicionar pessoa" style="background:var(--bg3);border:1.5px solid var(--border);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
     </button>
-    <button class="call-btn cam" id="gc-btn-cam" onclick="gcToggleCam()" title="Camera" style="display:none;">
+    <button class="call-btn end" onclick="endGroupCall()" title="Encerrar">
+      <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-3.41-2.6m-2.59-3.59a19.5 19.5 0 0 1-2.6-3.41 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+    </button>
+    <button class="call-btn cam" id="gc-btn-cam" onclick="gcToggleCam()" title="Câmera" style="display:none;">
       <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
     </button>
   </div>
@@ -2374,60 +2402,85 @@ async function gcCreatePeer(peerId, isInitiator) {
   return pc;
 }
 
-function gcAddRemoteStream(peerId, stream) {
-  const c = S.contacts[peerId] || {};
-  const name = c.name || peerId.slice(0,8);
+// Slot assignment: slot 0 = local, slots 1-3 = remote peers
+// GC.slotMap = { peerId: slotIndex }
+function gcGetFreeSlot() {
+  const used = new Set(Object.values(GC.slotMap || {}));
+  for (let i = 1; i <= 3; i++) { if (!used.has(i)) return i; }
+  return -1; // full
+}
 
-  if (GC.isVideo) {
-    // Video tile
-    let tile = document.getElementById('gc-tile-'+peerId);
-    if (!tile) {
-      tile = document.createElement('div');
-      tile.id = 'gc-tile-' + peerId;
-      tile.style.cssText = 'position:relative;background:#111;border-radius:12px;overflow:hidden;aspect-ratio:3/4;';
-      const vid = document.createElement('video');
+function gcUpdateSlot(slotIdx, peerId, stream) {
+  const ct = S.contacts[peerId] || {};
+  const name = ct.name || peerId.slice(0,8);
+  const slot = document.getElementById('gc-slot-' + slotIdx);
+  if (!slot) return;
+  slot.classList.remove('gc-slot-empty');
+
+  // Label
+  const lbl = slot.querySelector('.gc-slot-label');
+  if (lbl) lbl.textContent = name;
+
+  // Avatar
+  const av = slot.querySelector('.gc-av-circle');
+  if (av) {
+    av.classList.remove('gc-empty-circle');
+    if (ct.photo) { av.style.backgroundImage=`url(${ct.photo})`; av.textContent=''; }
+    else { av.style.backgroundImage=''; av.textContent=name[0].toUpperCase(); }
+  }
+
+  if (stream) {
+    if (GC.isVideo) {
+      // Show video, hide avatar
+      const vid = slot.querySelector('video') || document.createElement('video');
+      vid.id = 'gc-slot-'+slotIdx+'-vid';
       vid.autoplay = true; vid.playsinline = true;
-      vid.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      vid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
       vid.srcObject = stream;
-      const lbl = document.createElement('div');
-      lbl.style.cssText = 'position:absolute;bottom:6px;left:8px;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.8);';
-      lbl.textContent = name;
-      tile.appendChild(vid); tile.appendChild(lbl);
-      document.getElementById('gc-video-grid').appendChild(tile);
-    }
-    document.getElementById('gc-video-grid').style.display = 'grid';
-    document.getElementById('gc-avatar-grid').style.display = 'none';
-  } else {
-    // Audio avatar
-    let av = document.getElementById('gc-av-'+peerId);
-    if (!av) {
-      av = document.createElement('div');
-      av.id = 'gc-av-' + peerId;
-      av.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;';
-      const circle = document.createElement('div');
-      circle.style.cssText = 'width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:var(--accent);';
-      if (c.photo) { circle.style.backgroundImage=`url(${c.photo})`; circle.style.backgroundSize='cover'; circle.textContent=''; }
-      else circle.textContent = name[0].toUpperCase();
-      const nm = document.createElement('div');
-      nm.style.cssText = 'color:#fff;font-size:12px;font-weight:600;';
-      nm.textContent = name;
-      av.appendChild(circle); av.appendChild(nm);
-      document.getElementById('gc-avatar-grid').appendChild(av);
-      // Audio element
-      const audio = document.createElement('audio');
-      audio.autoplay = true; audio.srcObject = stream;
-      av.appendChild(audio);
+      slot.insertBefore(vid, slot.firstChild);
+      if (av) av.style.display = 'none';
+    } else {
+      // Audio element hidden
+      let audio = slot.querySelector('audio');
+      if (!audio) { audio = document.createElement('audio'); audio.autoplay = true; slot.appendChild(audio); }
+      audio.srcObject = stream;
     }
   }
 }
 
+function gcAddRemoteStream(peerId, stream) {
+  if (!GC.slotMap) GC.slotMap = {};
+  if (GC.slotMap[peerId] !== undefined) {
+    // Already has slot — just update stream
+    gcUpdateSlot(GC.slotMap[peerId], peerId, stream);
+    return;
+  }
+  const slot = gcGetFreeSlot();
+  if (slot === -1) { console.warn('[GC] No free slot'); return; }
+  GC.slotMap[peerId] = slot;
+  gcUpdateSlot(slot, peerId, stream);
+}
+
 function gcRemovePeer(peerId) {
   if (GC.peers[peerId]) { GC.peers[peerId].close(); delete GC.peers[peerId]; }
-  document.getElementById('gc-tile-'+peerId)?.remove();
-  document.getElementById('gc-av-'+peerId)?.remove();
+  // Reset their slot to empty
+  if (GC.slotMap && GC.slotMap[peerId] !== undefined) {
+    const slotIdx = GC.slotMap[peerId];
+    delete GC.slotMap[peerId];
+    const slot = document.getElementById('gc-slot-' + slotIdx);
+    if (slot) {
+      slot.classList.add('gc-slot-empty');
+      const vid = slot.querySelector('video'); if (vid) { vid.srcObject=null; vid.style.display='none'; }
+      const audio = slot.querySelector('audio'); if (audio) audio.srcObject=null;
+      const av = slot.querySelector('.gc-av-circle');
+      if (av) { av.className='gc-av-circle gc-empty-circle'; av.style.backgroundImage=''; av.style.display=''; av.textContent='+'; }
+      const lbl = slot.querySelector('.gc-slot-label');
+      if (lbl) { lbl.textContent='Aguardando...'; lbl.style.color='var(--muted)'; }
+    }
+  }
   gcUpdateStatus();
   if (Object.keys(GC.peers).length === 0) {
-    showToast('Todos sairam da chamada');
+    showToast('Todos saíram da chamada');
     endGroupCall();
   }
 }
@@ -2443,25 +2496,47 @@ function showGCScreen() {
   scr.style.display = 'flex';
   document.getElementById('gc-incoming').style.display = 'none';
   document.getElementById('gc-actions').style.display = 'flex';
-  document.getElementById('gc-avatar-grid').innerHTML = '';
-  document.getElementById('gc-video-grid').innerHTML = '';
-  document.getElementById('gc-video-grid').style.display = 'none';
 
-  // Add myself to avatar grid
-  const meDiv = document.createElement('div');
-  meDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;';
-  const circle = document.createElement('div');
-  circle.style.cssText = 'width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:var(--accent);';
-  if (S.id.photo) { circle.style.backgroundImage=`url(${S.id.photo})`; circle.style.backgroundSize='cover'; }
-  else circle.textContent = (S.id.name||'Eu')[0].toUpperCase();
-  const nm = document.createElement('div');
-  nm.style.cssText = 'color:var(--accent);font-size:12px;font-weight:600;'; nm.textContent = 'Você';
-  meDiv.appendChild(circle); meDiv.appendChild(nm);
-  document.getElementById('gc-avatar-grid').appendChild(meDiv);
+  // Reset slot map
+  GC.slotMap = {};
 
-  if (GC.isVideo) {
-    document.getElementById('gc-local-video').style.display = 'block';
-    document.getElementById('gc-local-video').srcObject = GC.localStream;
+  // Reset slots 1-3 to empty state
+  for (let i = 1; i <= 3; i++) {
+    const slot = document.getElementById('gc-slot-' + i);
+    if (!slot) continue;
+    slot.classList.add('gc-slot-empty');
+    const vid = slot.querySelector('video');
+    if (vid) { vid.srcObject = null; vid.style.display = 'none'; }
+    const audio = slot.querySelector('audio');
+    if (audio) { audio.srcObject = null; }
+    const av = slot.querySelector('.gc-av-circle');
+    if (av) { av.className = 'gc-av-circle gc-empty-circle'; av.style.backgroundImage=''; av.textContent='+'; }
+    const lbl = slot.querySelector('.gc-slot-label');
+    if (lbl) { lbl.textContent='Aguardando...'; lbl.style.color='var(--muted)'; }
+  }
+
+  // Slot 0 = local (Você)
+  const slot0 = document.getElementById('gc-slot-0');
+  if (slot0) {
+    slot0.classList.remove('gc-slot-empty');
+    const av0 = slot0.querySelector('.gc-av-circle');
+    if (av0) {
+      av0.classList.remove('gc-empty-circle');
+      if (S.id.photo) { av0.style.backgroundImage=`url(${S.id.photo})`; av0.textContent=''; }
+      else { av0.style.backgroundImage=''; av0.textContent=(S.id.name||'Eu')[0].toUpperCase(); }
+    }
+  }
+
+  // If video, show local video in slot 0
+  if (GC.isVideo && GC.localStream) {
+    const vid0 = document.getElementById('gc-slot-0-vid');
+    if (vid0) {
+      vid0.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;';
+      vid0.srcObject = GC.localStream;
+      // Hide avatar in slot 0
+      const av0 = slot0?.querySelector('.gc-av-circle');
+      if (av0) av0.style.display = 'none';
+    }
     document.getElementById('gc-btn-cam').style.display = 'flex';
   }
 }
@@ -2520,7 +2595,8 @@ function endGroupCall() {
   GC.active=false; GC.roomId=null; GC.incoming=null;
   const gcScr = document.getElementById('gc-screen');
   gcScr.classList.add('hidden'); gcScr.style.display = 'none';
-  document.getElementById('gc-local-video').srcObject = null;
+  const vid0 = document.getElementById('gc-slot-0-vid');
+  if (vid0) { vid0.srcObject=null; vid0.style.display='none'; }
 }
 
 function gcShowAddContact() {
