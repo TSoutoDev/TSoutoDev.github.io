@@ -185,8 +185,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .msg-row.me{justify-content:flex-end;}
 .msg-row.them{justify-content:flex-start;}
 .bubble{max-width:78%;padding:9px 13px;border-radius:17px;word-break:break-word;line-height:1.5;font-size:15px;}
-.msg-row.me .bubble{background:#1D3A4E;border-bottom-right-radius:4px;border:1px solid #2A4860;}
-.msg-row.them .bubble{background:var(--bg3);border-bottom-left-radius:4px;border:1px solid var(--border);}
+.msg-row.me .bubble{background:var(--bubble-me,#1D3A4E);border-bottom-right-radius:4px;border:1px solid var(--bubble-me-bd,#2A4860);}
+.msg-row.them .bubble{background:var(--bubble-them,var(--bg3));border-bottom-left-radius:4px;border:1px solid var(--bubble-them-bd,var(--border));}
 .bubble-meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:3px;}
 .bubble-time{font-size:10px;color:var(--muted);}
 .bubble-status{font-size:11px;color:var(--muted);line-height:1;}
@@ -443,7 +443,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="empty-title">Nenhuma conversa</div>
     <div class="empty-sub">Toque em + para adicionar alguem com o Hash deles</div>
   </div>
-  <button class="fab" onclick="SS('add')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+  <button class="fab" onclick="showHomeMenu()" id="fab-main"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+  <div id="home-menu" style="display:none;position:absolute;bottom:90px;right:20px;background:var(--bg2);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;z-index:100;min-width:180px;box-shadow:0 8px 32px rgba(0,0,0,.4);">
+    <div onclick="hideHomeMenu();SS('add')" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;border-bottom:1px solid var(--border);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Novo contato
+    </div>
+    <div onclick="hideHomeMenu();openNewGroup()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Novo grupo
+    </div>
+  </div>
 </div>
 
 <!-- CHAT -->
@@ -562,20 +572,39 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <h1>Configuracoes</h1>
   </div>
   <div class="settings-content">
-    <div class="section-header">Servidor</div>
-    <div class="setting-card">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">URL WebSocket do servidor Nexo</div>
-      <div style="display:flex;gap:8px;">
-        <input id="server-url-input" class="input-field input-mono" style="flex:1;font-size:11px;padding:8px 10px;" placeholder="wss://...">
-        <button onclick="saveServerUrl()" style="background:var(--accent);border:none;border-radius:9px;padding:0 12px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;white-space:nowrap;">Salvar</button>
-      </div>
-    </div>
+
     <div class="section-header">Seguranca</div>
     <div class="setting-card">
       <div style="font-size:13px;color:var(--muted);line-height:1.8;">
         Criptografia <strong style="color:var(--text)">AES-256</strong><br>
         Servidor atua como <strong style="color:var(--text)">relay — sem ler mensagens</strong><br>
         Banco de dados <strong style="color:var(--text)">criptografado</strong> localmente
+      </div>
+    </div>
+    <div class="section-header">Aparência</div>
+    <div class="setting-card" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:13px;color:var(--muted);">Cor dos balões de mensagem</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:13px;color:var(--text);">Suas mensagens</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div onclick="setBubbleColor('me','#1D3A4E','#2A4860')" style="width:26px;height:26px;border-radius:50%;background:#1D3A4E;border:2px solid #2A4860;cursor:pointer;" title="Azul escuro"></div>
+          <div onclick="setBubbleColor('me','#1A3330','#2A5540')" style="width:26px;height:26px;border-radius:50%;background:#1A3330;border:2px solid #2A5540;cursor:pointer;" title="Verde"></div>
+          <div onclick="setBubbleColor('me','#2A1F3D','#4A3070')" style="width:26px;height:26px;border-radius:50%;background:#2A1F3D;border:2px solid #4A3070;cursor:pointer;" title="Roxo"></div>
+          <div onclick="setBubbleColor('me','#3D1F1F','#702A2A')" style="width:26px;height:26px;border-radius:50%;background:#3D1F1F;border:2px solid #702A2A;cursor:pointer;" title="Vermelho"></div>
+          <div onclick="setBubbleColor('me','#1F2D3D','#2A4870')" style="width:26px;height:26px;border-radius:50%;background:#1F2D3D;border:2px solid #2A4870;cursor:pointer;" title="Marinho"></div>
+          <div onclick="setBubbleColor('me','#1F3D2A','#2A7050')" style="width:26px;height:26px;border-radius:50%;background:#1F3D2A;border:2px solid #2A7050;cursor:pointer;" title="Esmeralda"></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:13px;color:var(--text);">Mensagens recebidas</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div onclick="setBubbleColor('them','#151C2C','#1E2A40')" style="width:26px;height:26px;border-radius:50%;background:#151C2C;border:2px solid #1E2A40;cursor:pointer;" title="Escuro (padrão)"></div>
+          <div onclick="setBubbleColor('them','#0E1F1A','#1A3028')" style="width:26px;height:26px;border-radius:50%;background:#0E1F1A;border:2px solid #1A3028;cursor:pointer;" title="Verde escuro"></div>
+          <div onclick="setBubbleColor('them','#1A1225','#2A1A40')" style="width:26px;height:26px;border-radius:50%;background:#1A1225;border:2px solid #2A1A40;cursor:pointer;" title="Roxo escuro"></div>
+          <div onclick="setBubbleColor('them','#251A1A','#401A1A')" style="width:26px;height:26px;border-radius:50%;background:#251A1A;border:2px solid #401A1A;cursor:pointer;" title="Vinho"></div>
+          <div onclick="setBubbleColor('them','#1A2030','#2A3050')" style="width:26px;height:26px;border-radius:50%;background:#1A2030;border:2px solid #2A3050;cursor:pointer;" title="Azul médio"></div>
+          <div onclick="setBubbleColor('them','#0F1F18','#1A3528')" style="width:26px;height:26px;border-radius:50%;background:#0F1F18;border:2px solid #1A3528;cursor:pointer;" title="Floresta"></div>
+        </div>
       </div>
     </div>
     <div class="section-header">Dados</div>
@@ -601,12 +630,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Instale o Nexo na tela inicial para acesso rápido e melhor experiência.</div>
       <button onclick="installPWA()" style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:9px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;">📲 Instalar no dispositivo</button>
     </div>
-    <div class="section-header">Diagnóstico</div>
-    <div class="setting-row" onclick="showLogs()">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-      <span class="setting-label">Log de diagnóstico</span>
-      <span class="setting-value">›</span>
-    </div>
+
     <div class="section-header" style="color:var(--danger);">Perigo</div>
     <button class="btn-danger" onclick="confirmDeleteAccount()">Apagar conta e todos os dados</button>
     <div style="height:16px;"></div>
@@ -734,6 +758,47 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 </div>
 
+<!-- CREATE GROUP SCREEN -->
+<div id="screen-new-group" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="SS('home')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div style="font-weight:700;font-size:16px;flex:1;">Novo Grupo</div>
+    <button id="create-group-btn" onclick="doCreateGroup()" style="background:var(--accent);border:none;color:#06100D;font-weight:700;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Criar</button>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;flex:1;">
+    <!-- Photo + Name -->
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div id="new-group-photo-circle" onclick="pickGroupPhoto()" style="width:64px;height:64px;border-radius:50%;background:var(--bg3);border:2px dashed var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:24px;">📷</div>
+      <input id="new-group-name" placeholder="Nome do grupo" style="flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:15px;" maxlength="40">
+    </div>
+    <input id="new-group-photo-input" type="file" accept="image/*" style="display:none;" onchange="onGroupPhotoChange(this)">
+    <!-- Member picker -->
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Adicionar membros</div>
+    <div id="new-group-members" style="display:flex;flex-direction:column;gap:4px;"></div>
+  </div>
+</div>
+
+<!-- GROUP INFO SCREEN -->
+<div id="screen-group-info" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="SS('chat')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div style="font-weight:700;font-size:16px;flex:1;">Info do Grupo</div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;flex:1;">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0 16px;">
+      <div id="gi-photo" style="width:80px;height:80px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:32px;background-size:cover;background-position:center;"></div>
+      <div id="gi-name" style="font-size:20px;font-weight:700;color:var(--text);"></div>
+      <div id="gi-count" style="font-size:13px;color:var(--muted);"></div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Membros</div>
+    <div id="gi-members" style="display:flex;flex-direction:column;gap:4px;"></div>
+    <div style="margin-top:8px;">
+      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;">+ Adicionar membro</button>
+    </div>
+    <button onclick="leaveGroup()" style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--danger);border-radius:10px;color:var(--danger);font-weight:600;cursor:pointer;font-size:14px;margin-top:4px;">Sair do grupo</button>
+  </div>
+</div>
+
 <!-- LOCK SCREEN -->
 <div id="lock-screen" class="hidden">
   <div class="lock-icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -782,16 +847,29 @@ function addLog(type, msg) {
     el.textContent = LOGS.join('\n'); el.scrollTop = el.scrollHeight;
   }
 }
-(function() {
-  const ce = console.error.bind(console);
-  const cl = console.log.bind(console);
-  const cw = console.warn.bind(console);
-  console.error = (...a) => { addLog('ERR', a.join(' ')); ce(...a); };
-  console.log   = (...a) => { addLog('LOG', a.join(' ')); cl(...a); };
-  console.warn  = (...a) => { addLog('WRN', a.join(' ')); cw(...a); };
-  window.onerror = (msg,src,line,col,err) => addLog('EXC', msg+' L'+line+(err?' — '+err.stack:''));
-  window.onunhandledrejection = e => addLog('REJ', String(e.reason?.stack||e.reason||e));
-})();
+// Log capture disabled to save memory
+function setBubbleColor(who, bg, bd) {
+  const root = document.documentElement;
+  if (who === 'me') {
+    root.style.setProperty('--bubble-me', bg);
+    root.style.setProperty('--bubble-me-bd', bd);
+    localStorage.setItem('NX_BUBBLE_ME', JSON.stringify({bg,bd}));
+  } else {
+    root.style.setProperty('--bubble-them', bg);
+    root.style.setProperty('--bubble-them-bd', bd);
+    localStorage.setItem('NX_BUBBLE_THEM', JSON.stringify({bg,bd}));
+  }
+  showToast('Cor atualizada!');
+}
+
+function loadBubbleColors() {
+  const me = localStorage.getItem('NX_BUBBLE_ME');
+  const them = localStorage.getItem('NX_BUBBLE_THEM');
+  const root = document.documentElement;
+  if (me) { const {bg,bd}=JSON.parse(me); root.style.setProperty('--bubble-me',bg); root.style.setProperty('--bubble-me-bd',bd); }
+  if (them) { const {bg,bd}=JSON.parse(them); root.style.setProperty('--bubble-them',bg); root.style.setProperty('--bubble-them-bd',bd); }
+}
+
 function installPWA() {
   if (window._pwaPrompt) {
     window._pwaPrompt.prompt();
@@ -831,7 +909,8 @@ function clearLogs() { LOGS.length=0; const el=document.getElementById('log-cont
 const S = {
   id: null,         // identity: { hashId, name, privateKey, deviceId, serverUrl, createdAt }
   contacts: {},     // hashId → { name, secret, addedAt, status }
-  convs: {},        // hashId → [msg]
+  convs: {},        // hashId → [msg]  (also groupId → [msg])
+  groups: {},       // groupId → { name, photo, members:[hashId], key, createdAt, createdBy }
   invites: [],      // [{ fromHash, fromName, ts }]
   ws: null,
   wsReady: false,
@@ -885,13 +964,13 @@ function decDB(e, key) {
 function dbKey() { return 'NX_' + S.id.hashId; }
 function mk()    { return S.id.hashId + '_' + S.id.privateKey.slice(0,16); }
 function saveDB() {
-  localStorage.setItem(dbKey(), encDB({contacts:S.contacts, convs:S.convs, invites:S.invites}, mk()));
+  localStorage.setItem(dbKey(), encDB({contacts:S.contacts, convs:S.convs, invites:S.invites, groups:S.groups}, mk()));
 }
 function loadDB() {
   const r = localStorage.getItem(dbKey());
   if (!r) return;
   const d = decDB(r, mk());
-  if (d) { S.contacts=d.contacts||{}; S.convs=d.convs||{}; S.invites=d.invites||[]; }
+  if (d) { S.contacts=d.contacts||{}; S.convs=d.convs||{}; S.invites=d.invites||[]; S.groups=d.groups||{}; }
 }
 function saveId(id) { localStorage.setItem('NX_ID', JSON.stringify(id)); }
 function loadId()   { const r=localStorage.getItem('NX_ID'); return r?JSON.parse(r):null; }
@@ -1270,38 +1349,60 @@ function updateMyAvatar() {
 function updateConvList() {
   const list  = document.getElementById('conv-list');
   const empty = document.getElementById('empty-home');
-  const active = Object.entries(S.contacts)
-    .filter(([,c])=>c.status==='active')
-    .sort(([a],[b])=>{
-      const la=(S.convs[a]||[]).slice(-1)[0]?.ts||S.contacts[a].addedAt||0;
-      const lb=(S.convs[b]||[]).slice(-1)[0]?.ts||S.contacts[b].addedAt||0;
-      return lb-la;
-    });
-  if (!active.length) { list.innerHTML=''; empty.style.display='flex'; return; }
+
+  // Build unified list: contacts + groups
+  const items = [];
+
+  // Active contacts
+  Object.entries(S.contacts).filter(([,c])=>c.status==='active').forEach(([hId,c])=>{
+    const msgs = S.convs[hId]||[];
+    const last = msgs[msgs.length-1];
+    items.push({ id:hId, type:'contact', name:c.name, photo:c.photo||null,
+      lastTs: last?.ts||c.addedAt||0, last, unread:S.unread[hId]||0 });
+  });
+
+  // Groups
+  Object.entries(S.groups||{}).forEach(([gId,g])=>{
+    const msgs = S.convs[gId]||[];
+    const last = msgs[msgs.length-1];
+    items.push({ id:gId, type:'group', name:g.name, photo:g.photo||null,
+      lastTs: last?.ts||g.createdAt||0, last, unread:S.unread[gId]||0, members:g.members });
+  });
+
+  items.sort((a,b)=>b.lastTs-a.lastTs);
+
+  if (!items.length) { list.innerHTML=''; empty.style.display='flex'; return; }
   empty.style.display='none';
-  list.innerHTML = active.map(([hId,c])=>{
-    const msgs=(S.convs[hId]||[]), last=msgs[msgs.length-1];
-    const unread=S.unread[hId]||0, av=mkAv(c.name);
+
+  list.innerHTML = items.map(item=>{
+    const av = mkAv(item.name);
     let preview='<span style="font-style:italic">Sem mensagens</span>';
-    if (last) {
-      const pfx = last.from==='me' ? 'Voce: ' : '';
-      if (last.type==='audio') preview=pfx+'[Audio]';
-      else if (last.type==='image') preview=pfx+'[Imagem]';
-      else preview=pfx+esc(last.content).slice(0,50);
+    if (item.last) {
+      const lFrom = item.last.from;
+      let pfx = '';
+      if (lFrom === 'me') pfx = 'Você: ';
+      else if (item.type==='group') {
+        const senderName = S.contacts[lFrom]?.name || lFrom?.slice(0,6) || '';
+        pfx = senderName ? senderName+': ' : '';
+      }
+      if (item.last.type==='audio') preview=pfx+'🎵 Áudio';
+      else if (item.last.type==='image') preview=pfx+'📷 Imagem';
+      else preview=pfx+esc(item.last.content||'').slice(0,50);
     }
-    return `<div class="conv-item" onclick="openChat('${hId}')">
-      <div class="avatar" style="${c.photo?'background-image:url('+c.photo+');background-size:cover;background-position:center;background-color:transparent':'background:'+av.bg};border-color:${av.bd}">${c.photo?'':`${av.l}`}</div>
+    const groupBadge = item.type==='group' ? `<span style="font-size:10px;background:var(--bg3);color:var(--accent);padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;">GRUPO</span>` : '';
+    const onclick = item.type==='group' ? `openGroupChat('${item.id}')` : `openChat('${item.id}')`;
+    return `<div class="conv-item" onclick="${onclick}">
+      <div class="avatar" style="${item.photo?'background-image:url('+item.photo+');background-size:cover;background-position:center;background-color:transparent':'background:'+av.bg};border-color:${av.bd}">${item.photo?'':(item.type==='group'?'👥':av.l)}</div>
       <div class="conv-info">
-        <div class="conv-name">${esc(c.name)}</div>
+        <div class="conv-name">${esc(item.name)}${groupBadge}</div>
         <div class="conv-preview">${preview}</div>
       </div>
       <div class="conv-meta">
-        ${last?`<div class="conv-time">${fmtTime(last.ts)}</div>`:''}
-        ${unread>0?`<div class="unread-badge">${unread}</div>`:''}
+        ${item.last?`<div class="conv-time">${fmtTime(item.last.ts)}</div>`:''}
+        ${item.unread>0?`<div class="unread-badge">${item.unread}</div>`:''}
       </div>
     </div>`;
   }).join('');
-
 }
 
 function updateInviteBanner() {
@@ -2908,7 +3009,7 @@ function requestNotifPermission() {
   const id=loadId();
   if(id) {
     if(!id.deviceId) { id.deviceId=rndHex(8); saveId(id); }
-    S.id=id; loadDB();
+    S.id=id; loadDB(); loadBubbleColors();
     initLock();
     SS('home'); initWS(id.serverUrl, ()=>{
       // On reconnect, retry queued messages
