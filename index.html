@@ -15,28 +15,12 @@
   // Register service worker for PWA installability
   if ('serviceWorker' in navigator) {
     const swCode = `
-const CACHE = 'nexo-v2';
-const ASSETS = ['./index.html', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'];
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-    .then(() => clients.claim())
-  );
-});
+const CACHE = 'nexo-v1';
+self.addEventListener('install', e => { self.skipWaiting(); });
+self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
 self.addEventListener('fetch', e => {
-  // Sempre rede primeiro; se falhar, cache
-  e.respondWith(
-    fetch(e.request).then(r => {
-      if (r && r.status === 200 && e.request.method === 'GET') {
-        const clone = r.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
-      }
-      return r;
-    }).catch(() => caches.match(e.request))
-  );
+  // Network first for everything
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
 `;
     const swBlob = new Blob([swCode], {type:'application/javascript'});
@@ -470,9 +454,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       Novo contato
     </div>
-    <div onclick="hideHomeMenu();openNewGroup()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;">
+    <div onclick="hideHomeMenu();openNewGroup()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;border-bottom:1px solid var(--border);">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       Novo grupo
+    </div>
+    <div onclick="hideHomeMenu();startGroupCallFromHome()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      Chamada em grupo
     </div>
   </div>
 </div>
@@ -511,6 +499,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
     </button>
     <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleImageSelected(this)">
+    <button class="bar-btn" id="share-contact-btn" onclick="showShareContactPicker()" title="Compartilhar contato">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    </button>
     <button class="bar-btn" id="voice-btn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Segurar para gravar voz">
       <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
@@ -725,8 +716,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <span id="gc-status" style="color:var(--accent);font-size:12px;font-weight:600;">Conectando...</span>
   </div>
 
-  <!-- FIXED 4-SLOT GRID — always 2×2 -->
-  <div id="gc-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;width:100%;padding-top:56px;padding-bottom:88px;">
+  <!-- GRID 6 SLOTS — 2×3 (até 6 participantes) -->
+  <div id="gc-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:3px;width:100%;padding-top:56px;padding-bottom:88px;">
     <!-- Slot 0 — local (você) -->
     <div id="gc-slot-0" class="gc-slot" data-label="Você">
       <video id="gc-slot-0-vid" autoplay playsinline muted style="display:none;width:100%;height:100%;object-fit:cover;"></video>
@@ -734,19 +725,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div class="gc-slot-label">Você</div>
     </div>
     <!-- Slot 1 -->
-    <div id="gc-slot-1" class="gc-slot gc-slot-empty">
+    <div id="gc-slot-1" class="gc-slot gc-slot-empty" onclick="gcSlotTap(1)">
       <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
     </div>
     <!-- Slot 2 -->
-    <div id="gc-slot-2" class="gc-slot gc-slot-empty">
+    <div id="gc-slot-2" class="gc-slot gc-slot-empty" onclick="gcSlotTap(2)">
       <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
     </div>
     <!-- Slot 3 -->
-    <div id="gc-slot-3" class="gc-slot gc-slot-empty">
+    <div id="gc-slot-3" class="gc-slot gc-slot-empty" onclick="gcSlotTap(3)">
       <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
+    </div>
+    <!-- Slot 4 -->
+    <div id="gc-slot-4" class="gc-slot gc-slot-empty" onclick="gcSlotTap(4)">
+      <div class="gc-av-circle gc-empty-circle">+</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
+    </div>
+    <!-- Slot 5 -->
+    <div id="gc-slot-5" class="gc-slot gc-slot-empty" onclick="gcSlotTap(5)">
+      <div class="gc-av-circle gc-empty-circle">+</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
     </div>
   </div>
 
@@ -813,11 +814,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div id="gi-photo" style="width:80px;height:80px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:32px;background-size:cover;background-position:center;"></div>
       <div id="gi-name" style="font-size:20px;font-weight:700;color:var(--text);"></div>
       <div id="gi-count" style="font-size:13px;color:var(--muted);"></div>
+      <div id="gi-role-badge" style="display:none;font-size:11px;font-weight:700;background:#3DD6AC20;color:var(--accent);border:1px solid #3DD6AC40;border-radius:20px;padding:3px 12px;">👑 Administrador</div>
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Membros</div>
     <div id="gi-members" style="display:flex;flex-direction:column;gap:4px;"></div>
-    <div style="margin-top:8px;">
-      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;">+ Adicionar membro</button>
+    <div id="gi-admin-actions" style="display:none;margin-top:4px;display:flex;flex-direction:column;gap:8px;">
+      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--accent);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Adicionar membro
+      </button>
     </div>
     <button onclick="leaveGroup()" style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--danger);border-radius:10px;color:var(--danger);font-weight:600;cursor:pointer;font-size:14px;margin-top:4px;">Sair do grupo</button>
   </div>
@@ -969,7 +974,7 @@ function doCreateGroup() {
   const groupKey = rndHex(32);
   const members = [S.id.hashId, ..._newGroupSelected];
 
-  S.groups[groupId] = { name, photo:_newGroupPhoto, members, key:groupKey, createdAt:Date.now(), createdBy:S.id.hashId };
+  S.groups[groupId] = { name, photo:_newGroupPhoto, members, key:groupKey, createdAt:Date.now(), createdBy:S.id.hashId, admins:[S.id.hashId] };
   S.convs[groupId] = [];
   saveDB();
 
@@ -1039,9 +1044,17 @@ function sendGroupMsg(gId, content, type='text', extra={}) {
 }
 
 // ── Group info screen ──────────────────────────────────
+function isGroupAdmin(gId) {
+  const g = S.groups[gId]; if (!g) return false;
+  const admins = g.admins || [g.createdBy];
+  return admins.includes(S.id.hashId);
+}
+
 function openGroupInfo() {
   const gId = S.currentChat;
   const g = S.groups[gId]; if (!g) return;
+  const iAmAdmin = isGroupAdmin(gId);
+  const admins = g.admins || [g.createdBy];
 
   document.getElementById('gi-name').textContent = g.name;
   document.getElementById('gi-count').textContent = g.members.length + ' membros';
@@ -1049,30 +1062,91 @@ function openGroupInfo() {
   if (g.photo) { photo.style.backgroundImage=`url(${g.photo})`; photo.textContent=''; }
   else { photo.style.backgroundImage=''; photo.textContent='👥'; }
 
-  document.getElementById('gi-members').innerHTML = g.members.map(m=>{
-    const isMe = m===S.id.hashId;
-    const name = isMe ? 'Você' : (S.contacts[m]?.name||m.slice(0,8));
-    const photo = isMe ? (S.id.photo||null) : (S.contacts[m]?.photo||null);
+  // Badge de admin
+  const badge = document.getElementById('gi-role-badge');
+  badge.style.display = iAmAdmin ? 'inline-block' : 'none';
+
+  // Botões de admin
+  const adminActions = document.getElementById('gi-admin-actions');
+  adminActions.style.display = iAmAdmin ? 'flex' : 'none';
+
+  document.getElementById('gi-members').innerHTML = g.members.map(m => {
+    const isMe = m === S.id.hashId;
+    const name = isMe ? 'Você' : (S.contacts[m]?.name || m.slice(0,8));
+    const memberPhoto = isMe ? (S.id.photo||null) : (S.contacts[m]?.photo||null);
+    const isAdmin = admins.includes(m);
+    const isCreator = m === g.createdBy;
+
+    // Botões de ação que admin vê nos outros membros
+    let adminBtns = '';
+    if (iAmAdmin && !isMe) {
+      if (!isAdmin) {
+        adminBtns += `<button onclick="promoteToAdmin('${gId}','${m}')" title="Tornar admin"
+          style="background:none;border:1px solid var(--accent);border-radius:6px;padding:4px 8px;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">👑 Admin</button>`;
+      }
+      adminBtns += `<button onclick="removeMemberFromGroup('${gId}','${m}')" title="Remover"
+        style="background:none;border:1px solid var(--danger);border-radius:6px;padding:4px 8px;color:var(--danger);font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;">Remover</button>`;
+    }
+
     return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${photo?'background-image:url('+photo+');background-size:cover;background-position:center;':''}">
-        ${photo?'':name[0].toUpperCase()}
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${memberPhoto?'background-image:url('+memberPhoto+');background-size:cover;background-position:center;':''}">
+        ${memberPhoto ? '' : name[0].toUpperCase()}
       </div>
-      <div style="flex:1;">
-        <div style="color:var(--text);font-weight:600;">${esc(name)}</div>
-        ${m===g.createdBy?'<div style="font-size:11px;color:var(--accent);">Criador</div>':''}
+      <div style="flex:1;min-width:0;">
+        <div style="color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+        <div style="font-size:11px;color:${isCreator?'var(--accent)':isAdmin?'#F9B74F':'var(--muted)'};">
+          ${isCreator ? '👑 Criador' : isAdmin ? '⭐ Admin' : 'Membro'}
+        </div>
       </div>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${adminBtns}</div>
     </div>`;
   }).join('');
 
-  document.getElementById('gi-add-btn').style.display = g.createdBy===S.id.hashId ? 'block' : 'none';
   SS('group-info');
+}
+
+function promoteToAdmin(gId, memberHash) {
+  const g = S.groups[gId]; if (!g) return;
+  if (!isGroupAdmin(gId)) { showToast('Sem permissão'); return; }
+  if (!g.admins) g.admins = [g.createdBy];
+  if (g.admins.includes(memberHash)) { showToast('Já é admin'); return; }
+  g.admins.push(memberHash);
+  saveDB();
+  // Notificar todos os membros
+  const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
+  g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
+    send({ type:'GROUP_MEMBER_ADDED', to:m, groupId:gId,
+      newMemberHash: memberHash, newMemberName: name, action:'promote_admin',
+      admins: g.admins });
+  });
+  showToast(name + ' é admin agora!');
+  openGroupInfo();
+}
+
+function removeMemberFromGroup(gId, memberHash) {
+  const g = S.groups[gId]; if (!g) return;
+  if (!isGroupAdmin(gId)) { showToast('Sem permissão'); return; }
+  const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
+  if (!confirm('Remover ' + name + ' do grupo?')) return;
+  // Notificar o removido
+  send({ type:'GROUP_MEMBER_LEFT', to:memberHash, groupId:gId, memberHash, kicked:true });
+  // Notificar demais
+  g.members.filter(m=>m!==S.id.hashId&&m!==memberHash).forEach(m=>{
+    send({ type:'GROUP_MEMBER_LEFT', to:m, groupId:gId, memberHash, memberName:name });
+  });
+  g.members = g.members.filter(m=>m!==memberHash);
+  if (g.admins) g.admins = g.admins.filter(a=>a!==memberHash);
+  saveDB();
+  showToast(name + ' removido do grupo');
+  openGroupInfo();
 }
 
 function showAddMemberToGroup() {
   const gId = S.currentChat, g = S.groups[gId]; if (!g) return;
+  if (!isGroupAdmin(gId)) { showToast('Só admins podem adicionar membros'); return; }
   const available = Object.entries(S.contacts).filter(([hId,ct])=>ct.status==='active'&&!g.members.includes(hId));
   if (!available.length) { showToast('Todos os contatos já estão no grupo'); return; }
-  if (g.members.length >= 4) { showToast('Máximo 4 membros atingido'); return; }
+  if (g.members.length >= 6) { showToast('Máximo 6 membros atingido'); return; }
 
   const overlay = document.createElement('div');
   overlay.id = 'add-member-modal';
@@ -1097,9 +1171,11 @@ function addMemberToGroup(hId) {
   document.getElementById('add-member-modal')?.remove();
   const gId=S.currentChat, g=S.groups[gId]; if(!g) return;
   if (g.members.includes(hId)) { showToast('Já é membro'); return; }
+  if (g.members.length >= 6) { showToast('Máximo 6 membros atingido'); return; }
   g.members.push(hId); saveDB();
   send({ type:'GROUP_INVITE', to:hId, groupId:gId, groupName:g.name,
     groupPhoto:g.photo||null, groupKey:g.key, members:g.members,
+    admins: g.admins || [g.createdBy],
     memberNames:Object.fromEntries(g.members.map(m=>[m,m===S.id.hashId?S.id.name:(S.contacts[m]?.name||m.slice(0,8))])),
     fromName:S.id.name, ts:Date.now() });
   g.members.filter(m=>m!==S.id.hashId&&m!==hId).forEach(m=>{
@@ -1125,7 +1201,8 @@ function handleGroupPacket(pkt, from) {
     case 'GROUP_INVITE': {
       if (S.groups[pkt.groupId]) break;
       S.groups[pkt.groupId] = { name:pkt.groupName, photo:pkt.groupPhoto||null,
-        members:pkt.members, key:pkt.groupKey, createdAt:pkt.ts||Date.now(), createdBy:from };
+        members:pkt.members, key:pkt.groupKey, createdAt:pkt.ts||Date.now(), createdBy:from,
+        admins: pkt.admins || [from] };
       if (!S.convs[pkt.groupId]) S.convs[pkt.groupId]=[];
       saveDB(); updateConvList();
       showToast('Você entrou no grupo "'+pkt.groupName+'"');
@@ -1150,13 +1227,34 @@ function handleGroupPacket(pkt, from) {
     }
     case 'GROUP_MEMBER_ADDED': {
       const g=S.groups[pkt.groupId]; if(!g) break;
-      if (!g.members.includes(pkt.newMemberHash)) { g.members.push(pkt.newMemberHash); saveDB(); }
-      showToast(pkt.newMemberName+' entrou no grupo'); break;
+      if (pkt.action === 'promote_admin') {
+        if (!g.admins) g.admins = [g.createdBy];
+        if (!g.admins.includes(pkt.newMemberHash)) g.admins.push(pkt.newMemberHash);
+        if (pkt.admins) g.admins = pkt.admins;
+        saveDB();
+        const name = pkt.newMemberHash===S.id.hashId ? 'Você é' : (S.contacts[pkt.newMemberHash]?.name||'Alguém')+' é';
+        showToast(name + ' admin agora!');
+      } else {
+        if (!g.members.includes(pkt.newMemberHash)) { g.members.push(pkt.newMemberHash); saveDB(); }
+        showToast(pkt.newMemberName+' entrou no grupo');
+      }
+      break;
     }
     case 'GROUP_MEMBER_LEFT': {
       const g=S.groups[pkt.groupId]; if(!g) break;
-      g.members=g.members.filter(m=>m!==pkt.memberHash); saveDB();
-      showToast('Um membro saiu do grupo'); break;
+      if (pkt.memberHash === S.id.hashId) {
+        // Fui removido
+        delete S.groups[pkt.groupId]; delete S.convs[pkt.groupId];
+        saveDB(); updateConvList();
+        if (S.currentChat === pkt.groupId) SS('home');
+        showToast(pkt.kicked ? 'Você foi removido do grupo' : 'Você saiu do grupo');
+      } else {
+        g.members = g.members.filter(m=>m!==pkt.memberHash);
+        if (g.admins) g.admins = g.admins.filter(a=>a!==pkt.memberHash);
+        saveDB();
+        showToast((pkt.memberName || 'Um membro') + ' saiu do grupo');
+      }
+      break;
     }
   }
 }
@@ -1315,8 +1413,9 @@ function initWS(url, onReady) {
     S._wsConnecting = false;
     S.wsReady = true;
     S.wsRetryCount = 0;
-    // Register no servidor relay
+    // Register with FCM token if available
     const regPkt = { type:'REGISTER', id: S.id.hashId };
+    if (S._fcmToken) regPkt.fcmToken = S._fcmToken;
     ws.send(JSON.stringify(regPkt));
     setStatus('online');
     // Ping every 20s to keep alive on mobile
@@ -1325,11 +1424,10 @@ function initWS(url, onReady) {
       else { clearInterval(S.retryTimer); }
     }, 20000);
     if (onReady) onReady();
-    // Keep server awake every 10min (útil para Render/Railway que adormecem)
-    if (!S._keepAliveTimer && S.id?.serverUrl) {
-      const healthUrl = S.id.serverUrl.replace(/^wss?:\/\//, 'https://').replace(/\/.*$/, '/health');
+    // Keep Render awake every 10min
+    if (!S._keepAliveTimer) {
       S._keepAliveTimer = setInterval(() => {
-        fetch(healthUrl).catch(()=>{});
+        fetch('https://nexo-relay2.onrender.com/health').catch(()=>{});
       }, 10 * 60 * 1000);
     }
   };
@@ -1358,7 +1456,65 @@ function initWS(url, onReady) {
   };
 }
 
-// initFCM removido — era código Capacitor/APK, não funciona na web PWA
+// ── FCM PUSH NOTIFICATIONS (Capacitor) ────────────────
+function initFCM() {
+  // Only works in Capacitor (Android APK), not in browser
+  if (!window.Capacitor || !window.Capacitor.isNativePlatform()) {
+    console.log('[FCM] not running in Capacitor, skipping');
+    return;
+  }
+
+  // Capacitor exposes plugins via window.Capacitor.Plugins
+  const PushNotifications = window.Capacitor.Plugins.PushNotifications;
+  if (!PushNotifications) {
+    console.log('[FCM] PushNotifications plugin not found');
+    return;
+  }
+
+  console.log('[FCM] initializing...');
+
+  // Request permission
+  PushNotifications.requestPermissions().then(result => {
+    console.log('[FCM] permission:', result.receive);
+    if (result.receive === 'granted') {
+      PushNotifications.register();
+    } else {
+      console.log('[FCM] permission denied');
+    }
+  }).catch(e => console.log('[FCM] permission error:', e));
+
+  // Get FCM token — send to server
+  PushNotifications.addListener('registration', token => {
+    console.log('[FCM] registered, token:', token.value.slice(0, 20) + '...');
+    S._fcmToken = token.value;
+    // Send to server if already connected
+    if (S.wsReady && S.ws && S.ws.readyState === WebSocket.OPEN) {
+      S.ws.send(JSON.stringify({ type:'FCM_TOKEN', token: token.value }));
+    }
+  });
+
+  PushNotifications.addListener('registrationError', err => {
+    console.log('[FCM] registration error:', err.error);
+  });
+
+  // Handle notification received while app is open (foreground)
+  PushNotifications.addListener('pushNotificationReceived', notification => {
+    console.log('[FCM] foreground notification:', notification.title);
+    // Already handled by WebSocket in foreground — just show toast
+    showToast(notification.title || 'Nova notificação');
+  });
+
+  // Handle notification tap (app was in background/closed)
+  PushNotifications.addListener('pushNotificationActionPerformed', action => {
+    console.log('[FCM] notification tapped:', JSON.stringify(action.notification.data));
+    const data = action.notification.data || {};
+    if (data.type === 'CALL_OFFER' && data.from) {
+      showToast('Conectando à chamada...');
+    } else if (data.from && S.contacts[data.from]) {
+      openChat(data.from);
+    }
+  });
+}
 
 function scheduleReconnect() {
   clearTimeout(S.wsReconnectTimer);
@@ -1370,14 +1526,6 @@ function scheduleReconnect() {
     if (S.id && !S.wsReady) initWS(S.id.serverUrl);
   }, delay);
 }
-
-// Reconectar ao voltar para o app (tab/browser)
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && S.id && !S.wsReady) {
-    S.wsRetryCount = 0;
-    scheduleReconnect();
-  }
-});
 
 function send(pkt) {
   if (S.ws && S.ws.readyState === WebSocket.OPEN) {
@@ -1636,8 +1784,7 @@ function retrySend(toHashId, msg) {
 // ── ACCOUNT ────────────────────────────────────────────
 function createAccount() {
   const name   = document.getElementById('new-name-input').value.trim() || 'Usuario';
-  // Usa URL salva em settings, ou padrão
-  const server = (S._pendingServerUrl || 'wss://nexo-relay2.onrender.com').trim();
+  const server = 'wss://nexo-relay2.onrender.com';
   const avatarEl = document.getElementById('avatar-preview');
   const photo = avatarEl.dataset.photo || null;
   const id = {
@@ -1654,11 +1801,11 @@ function createAccount() {
 function restoreAccount() {
   const hash   = document.getElementById('restore-hash-input').value.trim().toUpperCase();
   const name   = document.getElementById('restore-name-input').value.trim() || 'Usuario';
-  const server = (S._pendingServerUrl || 'wss://nexo-relay2.onrender.com').trim();
+  const server = 'wss://nexo-relay2.onrender.com';
   if (!hash.match(/^[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}$/)) { showToast('Hash invalido'); return; }
   const id = { hashId:hash, name, privateKey:rndHex(32), deviceId:rndHex(8), serverUrl:server, createdAt:Date.now(), restored:true };
   S.id=id; saveId(id); loadDB();
-  SS('home'); initWS(id.serverUrl); updateHomeUI();
+  SS('home'); initWS(id.serverUrl); updateHomeUI(); initFCM();
 }
 
 // ── NAVIGATION ─────────────────────────────────────────
@@ -1770,8 +1917,8 @@ function updateInviteBanner() {
 // ── CHAT ───────────────────────────────────────────────
 function openChat(hId) {
   S.currentChat=hId; S.unread[hId]=0;
-  // Show 1-to-1 call buttons, hide group call button
-  document.getElementById('btn-group-call').style.display='none';
+  // Show all call buttons in 1-to-1 chat
+  document.getElementById('btn-group-call').style.display='flex';
   document.getElementById('btn-audio-call').style.display='flex';
   document.getElementById('btn-video-call').style.display='flex';
   const c=S.contacts[hId];
@@ -1958,26 +2105,31 @@ let _audioAnimFrame = null;
 function _updateAudioProgress() {
   if (!_currentAudio || !_currentAudioMsgId) return;
   const audio = _currentAudio;
-  const dur = audio.duration || 0;
+  // Usa duração real do elemento audio quando disponível, com fallback para metadata da msg
+  const dur = (audio.duration && isFinite(audio.duration) && audio.duration > 0)
+    ? audio.duration
+    : (() => { const m = Object.values(S.convs).flat().find(x=>x.id===_currentAudioMsgId); return m?.duration||0; })();
   const cur = audio.currentTime || 0;
-  const pct = dur > 0 ? (cur / dur) * 100 : 0;
+  const pct = dur > 0 ? Math.min((cur / dur) * 100, 100) : 0;
 
   const bar = document.getElementById('apr-' + _currentAudioMsgId);
   if (bar) bar.style.width = pct + '%';
 
-  // Time display: show elapsed
+  // Tempo: mostra elapsed / total
   const timer = document.getElementById('adt-' + _currentAudioMsgId);
   if (timer) {
-    const mm = Math.floor(cur/60), ss = String(Math.floor(cur%60)).padStart(2,'0');
-    timer.textContent = mm + ':' + ss;
+    const emm = Math.floor(cur/60), ess = String(Math.floor(cur%60)).padStart(2,'0');
+    const dmm = Math.floor(dur/60), dss = String(Math.floor(dur%60)).padStart(2,'0');
+    timer.textContent = `${emm}:${ess}/${dmm}:${dss}`;
   }
 
-  // Highlight bars
+  // Highlight barrinhas proporcionalmente
   const wv = document.getElementById('awv-' + _currentAudioMsgId);
   if (wv) {
     const spans = wv.querySelectorAll('span');
     const count = spans.length;
-    spans.forEach((sp, i) => sp.classList.toggle('played', i < Math.floor(pct / 100 * count)));
+    const filled = dur > 0 ? Math.floor((cur / dur) * count) : 0;
+    spans.forEach((sp, i) => sp.classList.toggle('played', i < filled));
   }
 
   if (!audio.paused) _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
@@ -2007,7 +2159,154 @@ function playAudio(msgId, btn) {
   audio.onplay = () => { _audioAnimFrame = requestAnimationFrame(_updateAudioProgress); };
 }
 
-// ── SEND TEXT ──────────────────────────────────────────
+// ── COMPARTILHAR CONTATO ───────────────────────────────
+function showShareContactPicker() {
+  const hId = S.currentChat;
+  if (!hId || S.groups[hId]) { showToast('Só disponível em conversas individuais'); return; }
+  const contacts = Object.entries(S.contacts).filter(([id, ct]) => ct.status === 'active' && id !== hId);
+  // Também pode compartilhar o próprio hash
+  const options = [
+    { id: S.id.hashId, name: 'Você mesmo (' + S.id.name + ')', photo: S.id.photo, isSelf: true },
+    ...contacts.map(([id, ct]) => ({ id, name: ct.name, photo: ct.photo }))
+  ];
+  if (!options.length) { showToast('Nenhum contato para compartilhar'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'share-contact-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:3000;display:flex;align-items:flex-end;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:65vh;overflow-y:auto;padding-bottom:24px;">
+      <div style="padding:16px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);z-index:1;">
+        <span style="font-weight:700;font-size:15px;color:var(--text);">Compartilhar contato</span>
+        <button onclick="document.getElementById('share-contact-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1;">×</button>
+      </div>
+      ${options.map(o => `
+        <div onclick="sendContactCard('${o.id}','${esc(o.name)}')" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);active:background:var(--bg3);">
+          <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${o.photo?'background-image:url('+o.photo+');background-size:cover;background-position:center;':''}">
+            ${o.photo ? '' : (o.name||'?')[0].toUpperCase()}
+          </div>
+          <div>
+            <div style="color:var(--text);font-weight:600;font-size:14px;">${esc(o.name)}</div>
+            <div style="color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;">${o.id.slice(0,19)}...</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function sendContactCard(contactHash, contactName) {
+  document.getElementById('share-contact-modal')?.remove();
+  const hId = S.currentChat, c = S.contacts[hId]; if (!c) return;
+  // Envia como mensagem de texto especial formatada
+  const cardText = `📇 Contato compartilhado\nNome: ${contactName}\nHash: ${contactHash}`;
+  const id = genId(), ts = Date.now();
+  const e = enc(cardText, c.secret);
+  const msg = { id, from:'me', content: cardText, ts, status:'sending', type:'contact_card' };
+  pushMsg(hId, msg);
+  renderMessages(hId); scrollBottom();
+  const sent = send({ type:'MSG', to:hId, id, enc:e, ts });
+  msg.status = 'queued';
+  if (sent) scheduleAckTimeout(hId, id);
+  saveDB(); renderMessages(hId);
+}
+
+// ── CHAMADA EM GRUPO DA TELA HOME ──────────────────────
+function startGroupCallFromHome() {
+  // Mostra seletor de contatos para montar a chamada
+  const contacts = Object.entries(S.contacts).filter(([,ct]) => ct.status === 'active');
+  if (contacts.length < 1) { showToast('Você precisa de ao menos 1 contato ativo'); return; }
+
+  const selected = new Set();
+  const overlay = document.createElement('div');
+  overlay.id = 'home-gc-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:3000;display:flex;align-items:flex-end;';
+
+  function render() {
+    const selCount = selected.size;
+    overlay.innerHTML = `
+      <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:80vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,16px);">
+        <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <span style="font-weight:700;font-size:15px;color:var(--text);">Nova chamada em grupo</span>
+          <button onclick="document.getElementById('home-gc-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
+        </div>
+        <div style="overflow-y:auto;flex:1;">
+          ${contacts.map(([id, ct]) => {
+            const isSel = selected.has(id);
+            return `<div onclick="homeGCToggle('${id}')" id="hgc-${id}" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);background:${isSel?'rgba(61,214,172,.08)':'transparent'};">
+              <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid ${isSel?'var(--accent)':'var(--border)'};display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${ct.photo?'background-image:url('+ct.photo+');background-size:cover;background-position:center;':''}">
+                ${ct.photo ? '' : (ct.name||'?')[0].toUpperCase()}
+              </div>
+              <div style="flex:1;"><div style="color:var(--text);font-weight:600;">${esc(ct.name)}</div></div>
+              <div style="width:24px;height:24px;border-radius:50%;border:2px solid ${isSel?'var(--accent)':'var(--border)'};background:${isSel?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;font-size:13px;color:#06100D;font-weight:700;">${isSel?'✓':''}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
+          <div style="font-size:12px;color:var(--muted);text-align:center;">${selCount} de 5 selecionados (máx. 5 + você = 6)</div>
+          <div style="display:flex;gap:10px;">
+            <button onclick="homeGCStart(false)" ${selCount<1?'disabled':''} style="flex:1;padding:12px;background:${selCount>=1?'var(--bg3)':'var(--bg)'};border:1.5px solid ${selCount>=1?'var(--accent)':'var(--border)'};border-radius:11px;color:${selCount>=1?'var(--accent)':'var(--muted)'};font-weight:700;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Só voz
+            </button>
+            <button onclick="homeGCStart(true)" ${selCount<1?'disabled':''} style="flex:1;padding:12px;background:${selCount>=1?'var(--accent)':'var(--bg)'};border:none;border-radius:11px;color:${selCount>=1?'#06100D':'var(--muted)'};font-weight:700;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              Vídeo
+            </button>
+          </div>
+        </div>
+      </div>`;
+    // re-bind onclick após render
+    contacts.forEach(([id]) => {
+      const el = overlay.querySelector(`#hgc-${id}`);
+      if (el) el.onclick = () => { homeGCToggleAndRender(id, selected, render); };
+    });
+    overlay.querySelector('[onclick^="homeGCStart(false)"]').onclick = () => homeGCStart(false, selected);
+    overlay.querySelector('[onclick^="homeGCStart(true)"]').onclick = () => homeGCStart(true, selected);
+    overlay.querySelector('[onclick^="document.getElementById(\'home-gc-modal\')"]').onclick = () => overlay.remove();
+  }
+
+  render();
+  document.body.appendChild(overlay);
+  // expose for re-render
+  window._homeGCSelected = selected;
+  window._homeGCRender = render;
+}
+
+function homeGCToggleAndRender(id, selected, render) {
+  if (selected.has(id)) selected.delete(id);
+  else if (selected.size < 5) selected.add(id);
+  else { showToast('Máximo 5 convidados (+ você = 6)'); return; }
+  render();
+}
+
+async function homeGCStart(isVideo, selected) {
+  document.getElementById('home-gc-modal')?.remove();
+  if (!selected || selected.size === 0) { showToast('Selecione ao menos 1 pessoa'); return; }
+  if (!S.wsReady) { showToast('Sem conexão'); return; }
+  if (GC.active || CALL.state !== 'idle') { showToast('Já em chamada'); return; }
+
+  GC.isVideo = isVideo;
+  GC.roomId = 'GC_' + rndHex(12).toUpperCase();
+  GC.active = true;
+
+  try {
+    GC.localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:isVideo });
+  } catch(e) {
+    if (isVideo) {
+      try { GC.localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false }); GC.isVideo=false; }
+      catch { showToast('Erro no microfone'); GC.active=false; return; }
+    } else { showToast('Erro no microfone'); GC.active=false; return; }
+  }
+
+  showGCScreen();
+
+  for (const peerId of selected) {
+    send({ type:'GC_INVITE', to:peerId, roomId:GC.roomId, isVideo:GC.isVideo,
+      fromName:S.id.name, fromPhoto:S.id.photo||null, ts:Date.now() });
+    await gcCreatePeer(peerId, true);
+  }
+  document.getElementById('gc-status').textContent = 'Chamando ' + selected.size + ' pessoa(s)...';
+}
 let typingCooldown=false;
 function onTyping() {
   const v=document.getElementById('msg-input').value;
@@ -2152,9 +2451,8 @@ function sendAudioMsg(blob, dur) {
     pushMsg(hId, msg);
     renderMessages(hId); scrollBottom();
     const sent=send({type:'AUDIO', to:hId, id, enc:e2, ts});
-    msg.status='queued';
-    if (sent) scheduleAckTimeout(hId, id, 45000);
-    else showToast('Audio na fila — reenviando automaticamente');
+    msg.status=sent?'queued':'queued';
+    if(!sent) showToast('Audio na fila');
     saveDB(); renderMessages(hId);
   };
   reader.readAsDataURL(blob);
@@ -2308,7 +2606,7 @@ function confirmDeleteAccount() {
 function pushMsg(hId, msg) { if(!S.convs[hId]) S.convs[hId]=[]; S.convs[hId].push(msg); }
 function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
 function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 function fmtTime(ts) {
   const d=new Date(ts),now=new Date(),diff=now-d;
   if(diff<60000) return 'agora';
@@ -3002,12 +3300,19 @@ async function gcCreatePeer(peerId, isInitiator) {
   return pc;
 }
 
-// Slot assignment: slot 0 = local, slots 1-3 = remote peers
-// GC.slotMap = { peerId: slotIndex }
+// Slot assignment: slot 0 = local, slots 1-5 = remote peers (até 6 total)
 function gcGetFreeSlot() {
   const used = new Set(Object.values(GC.slotMap || {}));
-  for (let i = 1; i <= 3; i++) { if (!used.has(i)) return i; }
-  return -1; // full
+  for (let i = 1; i <= 5; i++) { if (!used.has(i)) return i; }
+  return -1; // full (6 pessoas)
+}
+
+// Toque no slot vazio durante chamada → abre picker
+function gcSlotTap(slotIdx) {
+  if (!GC.active) return;
+  const slot = document.getElementById('gc-slot-' + slotIdx);
+  if (!slot || !slot.classList.contains('gc-slot-empty')) return;
+  gcShowAddContact();
 }
 
 function gcUpdateSlot(slotIdx, peerId, stream) {
@@ -3100,8 +3405,8 @@ function showGCScreen() {
   // Reset slot map
   GC.slotMap = {};
 
-  // Reset slots 1-3 to empty state
-  for (let i = 1; i <= 3; i++) {
+  // Reset slots 1-5 to empty state
+  for (let i = 1; i <= 5; i++) {
     const slot = document.getElementById('gc-slot-' + i);
     if (!slot) continue;
     slot.classList.add('gc-slot-empty');
@@ -3205,7 +3510,7 @@ function gcShowAddContact() {
   });
 
   if (entries.length === 0) { showToast('Nenhum contato disponível para adicionar'); return; }
-  if (Object.keys(GC.peers).length >= 3) { showToast('Máximo de 4 participantes atingido'); return; }
+  if (Object.keys(GC.peers).length >= 5) { showToast('Máximo de 6 participantes atingido'); return; }
 
   // Build modal
   const overlay = document.createElement('div');
@@ -3239,7 +3544,7 @@ function gcShowAddContact() {
 
 function gcInviteContact(hashId) {
   document.getElementById('gc-add-modal')?.remove();
-  if (Object.keys(GC.peers).length >= 3) { showToast('Máximo de 4 participantes'); return; }
+  if (Object.keys(GC.peers).length >= 5) { showToast('Máximo de 6 participantes'); return; }
   const c = S.contacts[hashId];
   if (!c) return;
   send({ type:'GC_INVITE', to:hashId, roomId:GC.roomId, isVideo:GC.isVideo, fromName:S.id.name, fromPhoto:S.id.photo||null, ts:Date.now() });
