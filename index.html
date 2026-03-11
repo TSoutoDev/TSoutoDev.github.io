@@ -2549,40 +2549,6 @@ function sendDocMsg(b64, mime, fileName, fileSize) {
   if (sent) scheduleAckTimeout(hId, id, 60000);
   saveDB(); renderMessages(hId);
 }
-  const file = input.files[0]; if (!file) return;
-  if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
-  // Compress before sending
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    URL.revokeObjectURL(url);
-    const canvas = document.createElement('canvas');
-    // Max 1200px on longest side
-    const MAX = 1200;
-    let w = img.width, h = img.height;
-    if (w > MAX || h > MAX) {
-      if (w > h) { h = Math.round(h * MAX/w); w = MAX; }
-      else { w = Math.round(w * MAX/h); h = MAX; }
-    }
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    // Compress to JPEG quality 0.75
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-    const b64 = dataUrl.split(',')[1];
-    const originalKB = Math.round(file.size/1024);
-    const compressedKB = Math.round(b64.length * 0.75 / 1024);
-    if (originalKB > compressedKB + 10) showToast(`Imagem comprimida: ${originalKB}KB → ${compressedKB}KB`);
-    sendImageMsg(b64, 'image/jpeg');
-  };
-  img.onerror = () => {
-    // Fallback: send as-is
-    const reader = new FileReader();
-    reader.onload = () => sendImageMsg(reader.result.split(',')[1], file.type||'image/jpeg');
-    reader.readAsDataURL(file);
-  };
-  img.src = url;
-  input.value = '';
-}
 
 function sendImageMsg(b64, mime) {
   const hId = S.currentChat;
