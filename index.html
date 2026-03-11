@@ -12,16 +12,16 @@
 <script>
 // ── SERVICE WORKER + PWA INSTALL ──────────────────────
 (function(){
-  // Register service worker for PWA installability
+  // SW minimalista — só para habilitar o manifesto PWA (installability)
+  // NÃO faz cache para evitar servir versão velha
   if ('serviceWorker' in navigator) {
     const swCode = `
-const CACHE = 'nexo-v1';
-self.addEventListener('install', e => { self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
-self.addEventListener('fetch', e => {
-  // Network first for everything
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-});
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(
+  caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+    .then(() => self.clients.claim())
+));
+self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
 `;
     const swBlob = new Blob([swCode], {type:'application/javascript'});
     const swUrl = URL.createObjectURL(swBlob);
@@ -3968,20 +3968,30 @@ function requestNotifPermission() {
 
 // ── BOOT ───────────────────────────────────────────────
 (function boot() {
-  requestNotifPermission();
-  const id=loadId();
-  if(id) {
-    if(!id.deviceId) { id.deviceId=rndHex(8); saveId(id); }
-    S.id=id; loadDB(); loadBubbleColors();
-    initLock();
-    SS('home'); initWS(id.serverUrl, ()=>{
-      // On reconnect, retry queued messages
-      for(const [hId,msgs] of Object.entries(S.convs)) {
-        msgs.filter(m=>m.from==='me'&&m.status==='queued').forEach(m=>retrySend(hId,m));
-      }
-    });
-    updateHomeUI();
-    document.getElementById('profile-hash').textContent=id.hashId;
+  try {
+    requestNotifPermission();
+    const id = loadId();
+    if (id) {
+      if (!id.deviceId) { id.deviceId = rndHex(8); saveId(id); }
+      S.id = id;
+      try { loadDB(); } catch(e) { console.warn('[boot] loadDB error', e); }
+      try { loadBubbleColors(); } catch(e) {}
+      try { initLock(); } catch(e) {}
+      SS('home');
+      try {
+        initWS(id.serverUrl, () => {
+          for (const [hId, msgs] of Object.entries(S.convs)) {
+            msgs.filter(m => m.from === 'me' && m.status === 'queued').forEach(m => retrySend(hId, m));
+          }
+        });
+      } catch(e) { console.warn('[boot] initWS error', e); }
+      try { updateHomeUI(); } catch(e) {}
+      try { document.getElementById('profile-hash').textContent = id.hashId; } catch(e) {}
+    }
+  } catch(e) {
+    console.error('[boot] fatal error', e);
+    // Tenta mostrar a tela welcome como fallback
+    try { SS('welcome'); } catch(e2) {}
   }
 })();
 </script>
