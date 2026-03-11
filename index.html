@@ -1800,6 +1800,11 @@ function restoreAccount() {
 
 // ── NAVIGATION ─────────────────────────────────────────
 let curScreen = 'welcome';
+// Seleção múltipla de mensagens
+let _selMsgs = new Set();
+let _selHId  = null;
+let _selMode = false;
+let _longPressTimer = null;
 function SS(name) {
   const prev = document.getElementById('screen-'+curScreen);
   const next = document.getElementById('screen-'+name);
@@ -2118,10 +2123,6 @@ function _doShareHash(contactId, targetId) {
 }
 
 // ── DELETE MESSAGE — seleção múltipla ─────────────────
-let _selMsgs = new Set();
-let _selHId  = null;
-let _selMode = false;
-let _longPressTimer = null;
 
 function startLongPress(e, hId, msgId) {
   _longPressTimer = setTimeout(() => _enterSelect(e, hId, msgId), 480);
