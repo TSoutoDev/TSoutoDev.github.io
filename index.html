@@ -236,9 +236,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .emoji-grid button{background:none;border:none;font-size:22px;cursor:pointer;padding:4px;border-radius:8px;transition:background .1s;line-height:1;}
 .emoji-grid button:hover{background:var(--bg3);}
 .input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;padding-bottom:calc(var(--safe-bot) + 10px);background:var(--bg);border-top:1px solid var(--border);flex-shrink:0;}
-.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:21px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;resize:none;max-height:110px;min-height:42px;line-height:1.4;transition:border-color .2s;-webkit-appearance:none;}
+.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:21px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;resize:none;max-height:110px;min-height:42px;line-height:1.4;transition:border-color .2s;-webkit-appearance:none;overflow-y:auto;word-break:break-word;}
 .msg-input:focus{border-color:#3DD6AC35;}
-.msg-input::placeholder{color:var(--muted);}
+.msg-input:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none;}
 .bar-btn{width:42px;height:42px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,border-color .15s;touch-action:none;user-select:none;}
 .bar-btn svg{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .bar-btn:active,.bar-btn.active{background:#3DD6AC20;border-color:var(--accent);}
@@ -495,13 +495,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button class="bar-btn" id="voice-btn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Segurar para gravar voz">
       <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
-    <textarea id="msg-input" class="msg-input" rows="1" placeholder="Mensagem..."
+    <div id="msg-input" class="msg-input" contenteditable="true"
+      role="textbox" aria-multiline="true"
+      data-placeholder="Mensagem..."
       onkeydown="handleMsgKey(event)"
-      oninput="autoResize(this);onTyping()"
+      oninput="autoResize(this);onTyping();handleMsgInput(event)"
       onpaste="handleMsgPaste(event)"
       enterkeyhint="send"
-      autocomplete="off" autocorrect="on" autocapitalize="sentences"
-      inputmode="text"></textarea>
+      inputmode="text"></div>
     <button id="send-btn" class="send-btn" onclick="sendTextMessage()" disabled>
       <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
@@ -550,26 +551,44 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button class="back-btn" onclick="SS('home')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
     <h1>Meu Perfil</h1>
   </div>
-  <div class="settings-content">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 0 8px;">
-      <div id="profile-avatar" class="avatar" onclick="document.getElementById('profile-photo-input').click()" style="width:72px;height:72px;font-size:26px;border-width:2px;cursor:pointer;position:relative;" title="Trocar foto">
-      </div>
+  <div class="settings-content" style="display:flex;flex-direction:column;align-items:center;gap:0;padding-top:0;">
+
+    <!-- Foto grande -->
+    <div style="width:100%;display:flex;flex-direction:column;align-items:center;padding:28px 20px 20px;background:linear-gradient(180deg,var(--bg2) 0%,transparent 100%);">
+      <div id="profile-avatar" class="avatar" onclick="document.getElementById('profile-photo-input').click()"
+        style="width:96px;height:96px;font-size:36px;border-width:3px;cursor:pointer;position:relative;box-shadow:0 4px 24px #0008;"
+        title="Trocar foto"></div>
       <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="changeProfilePhoto(this)">
-      <span style="font-size:11px;color:var(--muted);">Toque na foto para alterar</span>
-      <div style="font-size:20px;font-weight:700;" id="profile-name">—</div>
-    </div>
-    <div class="hash-card">
-      <div class="hash-label">Meu Hash — compartilhe para receber contatos</div>
-      <div id="profile-hash" class="hash-value">—</div>
-      <button class="hash-copy-btn" onclick="copyMyHash()"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar Hash</button>
-    </div>
-    <div class="section-header">Editar nome</div>
-    <div class="setting-card">
-      <div style="display:flex;gap:8px;">
-        <input id="edit-name-input" class="input-field" style="flex:1;" type="text" placeholder="Seu apelido" maxlength="30">
-        <button style="background:var(--accent);border:none;border-radius:9px;padding:0 15px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;white-space:nowrap;" onclick="saveName()">Salvar</button>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);">Toque para alterar foto</div>
+
+      <!-- Nome editável inline -->
+      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;" id="profile-name-row">
+        <div id="profile-name" style="font-size:22px;font-weight:700;color:var(--text);">—</div>
+        <button onclick="startEditName()" id="edit-name-btn"
+          style="background:none;border:none;color:var(--accent);cursor:pointer;padding:4px;display:flex;align-items:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+      </div>
+      <!-- Campo de edição (oculto por padrão) -->
+      <div id="profile-name-edit" style="display:none;align-items:center;gap:8px;margin-top:10px;">
+        <input id="edit-name-input" class="input-field" style="width:180px;text-align:center;font-size:16px;" type="text" placeholder="Seu apelido" maxlength="30">
+        <button onclick="saveName()" style="background:var(--accent);border:none;border-radius:9px;padding:8px 14px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;">✓</button>
+        <button onclick="cancelEditName()" style="background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:8px 12px;color:var(--muted);cursor:pointer;font-size:13px;">✕</button>
       </div>
     </div>
+
+    <!-- Ações rápidas -->
+    <div style="width:100%;padding:0 16px;display:flex;flex-direction:column;gap:0;margin-top:8px;">
+      <div class="setting-row" onclick="SS('settings')" style="border-radius:12px 12px 0 0;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="setting-label">Configurações</span><span class="setting-value">›</span>
+      </div>
+      <div class="setting-row" onclick="copyMyHash()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span class="setting-label">Copiar meu Hash</span><span class="setting-value">›</span>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -581,6 +600,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
   <div class="settings-content">
 
+    <div class="section-header">Meu Hash</div>
+    <div class="hash-card">
+      <div class="hash-label">Compartilhe para receber contatos</div>
+      <div id="profile-hash" class="hash-value">—</div>
+      <button class="hash-copy-btn" onclick="copyMyHash()"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar Hash</button>
+    </div>
     <div class="section-header">Seguranca</div>
     <div class="setting-card">
       <div style="font-size:13px;color:var(--muted);line-height:1.8;">
@@ -1015,7 +1040,7 @@ function openGroupChat(gId) {
   document.getElementById('btn-video-call').style.display='none';
   renderMessages(gId);
   document.getElementById('typing-indicator').classList.remove('show');
-  document.getElementById('msg-input').value='';
+  _setMsgText('');
   document.getElementById('send-btn').disabled=true;
   SS('chat');
   updateConvList();
@@ -1079,6 +1104,13 @@ function openGroupInfo() {
       if (!isAdmin) {
         adminBtns += `<button onclick="promoteToAdmin('${gId}','${m}')" title="Tornar admin"
           style="background:none;border:1px solid var(--accent);border-radius:6px;padding:4px 8px;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">👑 Admin</button>`;
+      } else if (isAdmin && !isCreator) {
+        // Criador pode remover admin de outros admins
+        const iAmCreator = S.id.hashId === g.createdBy;
+        if (iAmCreator) {
+          adminBtns += `<button onclick="demoteAdmin('${gId}','${m}')" title="Remover admin"
+            style="background:none;border:1px solid #F9B74F;border-radius:6px;padding:4px 8px;color:#F9B74F;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">⭐ Remover</button>`;
+        }
       }
       adminBtns += `<button onclick="removeMemberFromGroup('${gId}','${m}')" title="Remover"
         style="background:none;border:1px solid var(--danger);border-radius:6px;padding:4px 8px;color:var(--danger);font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;">Remover</button>`;
@@ -1108,7 +1140,6 @@ function promoteToAdmin(gId, memberHash) {
   if (g.admins.includes(memberHash)) { showToast('Já é admin'); return; }
   g.admins.push(memberHash);
   saveDB();
-  // Notificar todos os membros
   const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
   g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
     send({ type:'GROUP_MEMBER_ADDED', to:m, groupId:gId,
@@ -1116,6 +1147,23 @@ function promoteToAdmin(gId, memberHash) {
       admins: g.admins });
   });
   showToast(name + ' é admin agora!');
+  openGroupInfo();
+}
+
+function demoteAdmin(gId, memberHash) {
+  const g = S.groups[gId]; if (!g) return;
+  if (S.id.hashId !== g.createdBy) { showToast('Apenas o criador pode remover admins'); return; }
+  if (!g.admins) return;
+  const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
+  if (!confirm('Remover privilégio de admin de ' + name + '?')) return;
+  g.admins = g.admins.filter(a => a !== memberHash);
+  saveDB();
+  g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
+    send({ type:'GROUP_MEMBER_ADDED', to:m, groupId:gId,
+      newMemberHash: memberHash, newMemberName: name, action:'demote_admin',
+      admins: g.admins });
+  });
+  showToast(name + ' não é mais admin');
   openGroupInfo();
 }
 
@@ -1838,10 +1886,20 @@ function SS(name, _fromPopState) {
     if (el && S.id) el.value = S.id.serverUrl || '';
   }
   if (name==='add') {
-    document.getElementById('add-hash-input').value='';
-    document.getElementById('add-name-input').value='';
-    document.getElementById('add-status').textContent='';
-    document.getElementById('send-invite-btn').disabled=true;
+    const prefill = window._addCardPrefill;
+    window._addCardPrefill = null;
+    if (prefill) {
+      document.getElementById('add-hash-input').value = prefill.hash;
+      document.getElementById('add-name-input').value = prefill.name;
+      document.getElementById('add-status').textContent = '';
+      validateAddForm();
+      showToast('Hash preenchido — toque em Enviar Convite');
+    } else {
+      document.getElementById('add-hash-input').value='';
+      document.getElementById('add-name-input').value='';
+      document.getElementById('add-status').textContent='';
+      document.getElementById('send-invite-btn').disabled=true;
+    }
   }
 }
 
@@ -1854,11 +1912,22 @@ window.addEventListener('popstate', (e) => {
   const ep = document.getElementById('emoji-picker');
   if (ep && !ep.classList.contains('hidden')) { ep.classList.add('hidden'); closedModal = true; }
   if (closedModal) { _hPush(curScreen); return; }
+
   if (targetScreen && document.getElementById('screen-' + targetScreen)) {
+    // Navega para a tela do estado
     SS(targetScreen, true);
+    // Se voltou para tela raiz, garante que há um estado "vazio" antes dela
+    // para que o próximo voltar saia do app
+    if (_ROOT_SCREENS.has(targetScreen)) {
+      // Não reempilha — deixa o history esvaziar naturalmente
+    }
   } else {
-    if (_ROOT_SCREENS.has(curScreen)) { try { history.go(-1); } catch(e) {} }
-    else { SS('home', true); _hReplace('home'); }
+    // Sem estado ou tela inválida — volta para home se não estiver lá
+    if (!_ROOT_SCREENS.has(curScreen)) {
+      SS('home', true);
+      _hReplace('home');
+    }
+    // Se já está na raiz: não faz nada, o browser/Android vai minimizar/fechar
   }
 });
 
@@ -1964,7 +2033,7 @@ function openChat(hId) {
   setChatStatus();
   renderMessages(hId);
   document.getElementById('typing-indicator').classList.remove('show');
-  document.getElementById('msg-input').value='';
+  _setMsgText('');
   document.getElementById('send-btn').disabled=true;
   SS('chat');
   // Send read receipts for unread messages AND mark locally as read
@@ -2115,15 +2184,9 @@ function copyToClipboard(text) {
 // Abre tela de adicionar contato já preenchida com hash e nome do card
 function addContactFromCard(hash, name) {
   if (!confirm(`Deseja adicionar "${name}" como contato?`)) return;
+  // Flag para SS('add') NÃO limpar desta vez
+  window._addCardPrefill = { hash, name };
   SS('add');
-  setTimeout(() => {
-    const hashInput = document.getElementById('add-hash-input');
-    const nameInput = document.getElementById('add-name-input');
-    if (hashInput) hashInput.value = hash;
-    if (nameInput) nameInput.value = name;
-    validateAddForm();
-    showToast('Hash preenchido — toque em Enviar Convite');
-  }, 350); // aguarda animação da tela
 }
 
 // ── COMPARTILHAR HASH DO CONTATO (da conv-list) ────────
@@ -2244,30 +2307,42 @@ function _setAudioBtnState(msgId, playing) {
   btn.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
 }
 
-function stopCurrentAudio() {
+function stopCurrentAudio(fromEnd) {
   if (_currentAudio) {
-    // Cancela animação IMEDIATAMENTE antes de qualquer outra coisa
     if (_audioAnimFrame) { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = null; }
     const id = _currentAudioMsgId;
-    // Zera referências globais ANTES de alterar o elemento (evita frames extras)
     _currentAudio.onended = null;
     _currentAudio.onplay  = null;
     _currentAudio.onloadedmetadata = null;
     _currentAudio.pause();
     _currentAudio = null;
     _currentAudioMsgId = null;
-    // Atualiza UI
     _setAudioBtnState(id, false);
     const bar = document.getElementById('apr-' + id);
-    if (bar) bar.style.width = '0%';
+    if (bar) bar.style.width = fromEnd ? '100%' : '0%';
     const wv = document.getElementById('awv-' + id);
-    if (wv) wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
-    // Timer: mostra duração total salva
-    const m = Object.values(S.convs).flat().find(x => x.id === id);
+    if (wv) wv.querySelectorAll('span').forEach((sp,i,a) => sp.classList.toggle('played', fromEnd || false));
     const timer = document.getElementById('adt-' + id);
-    if (timer && m) {
-      const dur = m.duration || 0;
-      timer.textContent = Math.floor(dur/60) + ':' + String(Math.floor(dur%60)).padStart(2,'0');
+    if (timer) {
+      if (fromEnd) {
+        // Terminou: mostra 0:00 e após 1.5s volta para duração total
+        timer.textContent = '0:00';
+        setTimeout(() => {
+          const m2 = Object.values(S.convs).flat().find(x => x.id === id);
+          if (timer && m2) {
+            const dur = m2.duration || 0;
+            timer.textContent = Math.floor(dur/60) + ':' + String(Math.floor(dur%60)).padStart(2,'0');
+            const b2 = document.getElementById('apr-' + id);
+            if (b2) b2.style.width = '0%';
+            const w2 = document.getElementById('awv-' + id);
+            if (w2) w2.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
+          }
+        }, 1500);
+      } else {
+        // Parado manualmente: restaura duração imediatamente
+        const m = Object.values(S.convs).flat().find(x => x.id === id);
+        if (m) { const dur=m.duration||0; timer.textContent=Math.floor(dur/60)+':'+String(Math.floor(dur%60)).padStart(2,'0'); }
+      }
     }
   }
 }
@@ -2334,7 +2409,7 @@ function playAudio(msgId) {
   // Assim que metadata carregar, dispara primeiro frame
   audio.onloadedmetadata = () => _updateAudioProgress();
   audio.onplay  = () => { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = requestAnimationFrame(_updateAudioProgress); };
-  audio.onended = () => stopCurrentAudio();
+  audio.onended = () => stopCurrentAudio(true);
   audio.play().catch(() => stopCurrentAudio());
 }
 
@@ -2486,15 +2561,48 @@ async function homeGCStart(isVideo, selected) {
   }
   document.getElementById('gc-status').textContent = 'Chamando ' + selected.size + ' pessoa(s)...';
 }
+function _getMsgText() {
+  const el = document.getElementById('msg-input');
+  if (!el) return '';
+  // Suporte a contenteditable e textarea
+  return el.value !== undefined ? el.value : el.innerText || '';
+}
+function _setMsgText(text) {
+  const el = document.getElementById('msg-input');
+  if (!el) return;
+  if (el.value !== undefined) el.value = text;
+  else { el.innerText = text; el.dispatchEvent(new Event('input')); }
+}
+
 let typingCooldown=false;
 function onTyping() {
-  const v=document.getElementById('msg-input').value;
+  const v = _getMsgText();
   document.getElementById('send-btn').disabled=!v.trim();
   if(S.currentChat&&!typingCooldown) {
     send({type:'TYPING', to:S.currentChat});
     typingCooldown=true; setTimeout(()=>typingCooldown=false,2000);
   }
 }
+
+// Captura imagens/GIFs do teclado Android (inputType insertContent) ou Ctrl+V
+function handleMsgInput(e) {
+  if (e.inputType === 'insertContent' || e.inputType === 'insertFromYank') {
+    const dt = e.dataTransfer;
+    if (dt?.files?.length) {
+      e.preventDefault();
+      const file = dt.files[0];
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = reader.result.split(',')[1];
+        sendImageMsg(b64, file.type || 'image/png');
+        _setMsgText('');
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+}
+
 function handleMsgKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTextMessage();} }
 
 // Captura imagens/GIFs colados do teclado Android ou Ctrl+V
@@ -2519,18 +2627,18 @@ function handleMsgPaste(e) {
 }
 
 function sendTextMessage() {
-  const input=document.getElementById('msg-input');
-  const text=input.value.trim();
+  const text = _getMsgText().trim();
   if(!text||!S.currentChat) return;
-  // Route to group or 1-to-1
-  if (S.groups[S.currentChat]) { sendGroupMsg(S.currentChat, text, 'text'); input.value=''; input.style.height=''; document.getElementById('send-btn').disabled=true; return; }
+  _setMsgText('');
+  document.getElementById('msg-input').style.height='';
+  document.getElementById('send-btn').disabled=true;
+  if (S.groups[S.currentChat]) { sendGroupMsg(S.currentChat, text, 'text'); return; }
   const hId=S.currentChat, c=S.contacts[hId];
   if(!c) return;
   const id=genId(), ts=Date.now();
   const e=enc(text, c.secret);
   const msg={id, from:'me', content:text, ts, status:'sending'};
   pushMsg(hId, msg);
-  input.value=''; input.style.height='';
   document.getElementById('send-btn').disabled=true;
   renderMessages(hId); scrollBottom();
   const sent=send({type:'MSG', to:hId, id, enc:e, ts});
@@ -2786,10 +2894,30 @@ function updateProfileUI() {
   if(!S.id) return;
   const el=document.getElementById('profile-avatar');
   renderAv(el, S.id.name, S.id.photo);
-  el.style.width='72px'; el.style.height='72px'; el.style.fontSize='26px';
+  el.style.width='96px'; el.style.height='96px'; el.style.fontSize='36px';
   document.getElementById('profile-name').textContent=S.id.name;
-  document.getElementById('profile-hash').textContent=S.id.hashId;
-  document.getElementById('edit-name-input').value=S.id.name;
+  const ph = document.getElementById('profile-hash');
+  if (ph) ph.textContent=S.id.hashId;
+}
+function startEditName() {
+  document.getElementById('profile-name-row').style.display='none';
+  const row = document.getElementById('profile-name-edit');
+  row.style.display='flex';
+  const inp = document.getElementById('edit-name-input');
+  inp.value = S.id?.name || '';
+  inp.focus();
+}
+function cancelEditName() {
+  document.getElementById('profile-name-row').style.display='flex';
+  document.getElementById('profile-name-edit').style.display='none';
+}
+function saveName() {
+  const n=document.getElementById('edit-name-input').value.trim();
+  if(!n) return;
+  S.id.name=n; saveId(S.id);
+  cancelEditName();
+  updateProfileUI(); updateMyAvatar();
+  showToast('Nome atualizado');
 }
 function compressProfilePhoto(file, cb) {
   if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
@@ -2863,7 +2991,16 @@ function confirmDeleteAccount() {
 
 // ── HELPERS ────────────────────────────────────────────
 function pushMsg(hId, msg) { if(!S.convs[hId]) S.convs[hId]=[]; S.convs[hId].push(msg); }
-function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
+function autoResize(el) {
+  if (el.tagName === 'TEXTAREA') {
+    el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px';
+  } else {
+    // contenteditable: deixa crescer naturalmente até max-height (definido no CSS)
+    // só precisa atualizar o send-btn
+    const v = el.innerText || el.textContent || '';
+    document.getElementById('send-btn').disabled = !v.trim();
+  }
+}
 function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 function fmtTime(ts) {
@@ -3301,12 +3438,17 @@ function filterEmojis(q) {
 function insertEmoji(e) {
   const inp = document.getElementById('msg-input');
   if (!inp) return;
-  const s = inp.selectionStart, en = inp.selectionEnd;
-  inp.value = inp.value.slice(0,s) + e + inp.value.slice(en);
-  inp.selectionStart = inp.selectionEnd = s + e.length;
   inp.focus();
-  document.getElementById('send-btn').disabled = !inp.value.trim();
-  autoResize(inp);
+  // Para contenteditable, usa execCommand ou insertText
+  if (inp.contentEditable === 'true') {
+    document.execCommand('insertText', false, e);
+  } else {
+    const s = inp.selectionStart, en = inp.selectionEnd;
+    inp.value = inp.value.slice(0,s) + e + inp.value.slice(en);
+    inp.selectionStart = inp.selectionEnd = s + e.length;
+    autoResize(inp);
+  }
+  document.getElementById('send-btn').disabled = !(_getMsgText().trim());
 }
 
 function toggleEmojiPicker() {
