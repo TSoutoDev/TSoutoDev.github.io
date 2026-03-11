@@ -15,12 +15,28 @@
   // Register service worker for PWA installability
   if ('serviceWorker' in navigator) {
     const swCode = `
-const CACHE = 'nexo-v1';
-self.addEventListener('install', e => { self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
+const CACHE = 'nexo-v2';
+const ASSETS = ['./index.html', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'];
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    .then(() => clients.claim())
+  );
+});
 self.addEventListener('fetch', e => {
-  // Network first for everything
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // Sempre rede primeiro; se falhar, cache
+  e.respondWith(
+    fetch(e.request).then(r => {
+      if (r && r.status === 200 && e.request.method === 'GET') {
+        const clone = r.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+      }
+      return r;
+    }).catch(() => caches.match(e.request))
+  );
 });
 `;
     const swBlob = new Blob([swCode], {type:'application/javascript'});
@@ -184,6 +200,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .msg-row{display:flex;margin:1px 0;}
 .msg-row.me{justify-content:flex-end;}
 .msg-row.them{justify-content:flex-start;}
+.msg-row.selected .bubble{opacity:0.6;transform:scale(0.97);transition:all .15s;}
+.delete-bar{position:fixed;bottom:0;left:0;right:0;background:#1a0a0d;border-top:1.5px solid #E85D6A40;padding:14px 20px;padding-bottom:calc(var(--safe-bot) + 14px);display:none;align-items:center;justify-content:space-between;z-index:200;}
+.delete-bar.show{display:flex;}
 .bubble{max-width:78%;padding:9px 13px;border-radius:17px;word-break:break-word;line-height:1.5;font-size:15px;}
 .msg-row.me .bubble{background:var(--bubble-me,#1D3A4E);border-bottom-right-radius:4px;border:1px solid var(--bubble-me-bd,#2A4860);}
 .msg-row.them .bubble{background:var(--bubble-them,var(--bg3));border-bottom-left-radius:4px;border:1px solid var(--bubble-them-bd,var(--border));}
@@ -205,9 +224,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .play-btn:active{opacity:.7;}
 .play-btn svg{width:13px;height:13px;stroke:#06100D;fill:#06100D;stroke-width:2;stroke-linecap:round;}
 .play-btn.playing svg{fill:none;stroke:#06100D;}
-.audio-waveform{flex:1;height:22px;display:flex;align-items:center;gap:2px;}
-.audio-waveform span{display:inline-block;width:3px;border-radius:2px;background:var(--accent);opacity:.45;}
-.audio-dur{font-size:11px;color:var(--muted);white-space:nowrap;}
+.audio-waveform{flex:1;height:22px;display:flex;align-items:center;gap:2px;cursor:pointer;position:relative;}
+.audio-waveform span{display:inline-block;width:3px;border-radius:2px;background:var(--accent);opacity:.35;transition:opacity .1s;}
+.audio-waveform span.played{opacity:1;}
+.audio-dur{font-size:11px;color:var(--muted);white-space:nowrap;min-width:32px;text-align:right;}
+.audio-progress{position:absolute;bottom:-2px;left:0;height:2px;background:var(--accent);border-radius:2px;width:0%;transition:width .1s linear;pointer-events:none;}
 
 /* TYPING */
 .typing-indicator{display:none;padding:0 14px 8px;align-items:center;gap:6px;}
@@ -467,9 +488,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <div id="chat-status" class="chat-header-status">—</div>
       </div>
     </div>
-    <button class="icon-btn" onclick="startGroupCall()" title="Chamada em grupo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
-    <button class="icon-btn" onclick="startCall('audio')" title="Chamada de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
-    <button class="icon-btn" onclick="startCall('video')" title="Chamada de video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
+    <button id="btn-group-call" class="icon-btn" onclick="startGroupCall()" title="Chamada em grupo" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
+    <button id="btn-audio-call" class="icon-btn" onclick="startCall('audio')" title="Chamada de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+    <button id="btn-video-call" class="icon-btn" onclick="startCall('video')" title="Chamada de video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
     <button class="icon-btn" onclick="openChatMenu()"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
   </div>
   <div id="messages-area" class="messages-area"></div>
@@ -625,15 +646,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <span class="setting-label">Ativar notificacoes</span>
       <span class="setting-value">›</span>
     </div>
-    <div class="section-header">Instalar App</div>
-    <div class="setting-card">
-      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Instale o Nexo na tela inicial para acesso rápido e melhor experiência.</div>
-      <button onclick="installPWA()" style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:9px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;">📲 Instalar no dispositivo</button>
-    </div>
-
     <div class="section-header" style="color:var(--danger);">Perigo</div>
     <button class="btn-danger" onclick="confirmDeleteAccount()">Apagar conta e todos os dados</button>
-    <div style="height:16px;"></div>
+    <div style="height:80px;"></div>
+  </div>
+</div>
+
+<!-- DELETE BAR -->
+<div id="delete-bar" class="delete-bar">
+  <span id="delete-bar-label" style="color:var(--muted);font-size:14px;">1 mensagem selecionada</span>
+  <div style="display:flex;gap:10px;">
+    <button onclick="cancelDeleteMsg()" style="background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:8px 16px;color:var(--text);font-size:14px;cursor:pointer;">Cancelar</button>
+    <button onclick="confirmDeleteMsg()" style="background:#E85D6A;border:none;border-radius:9px;padding:8px 16px;color:white;font-size:14px;font-weight:700;cursor:pointer;">🗑 Apagar</button>
   </div>
 </div>
 
@@ -848,6 +872,295 @@ function addLog(type, msg) {
   }
 }
 // Log capture disabled to save memory
+// ══════════════════════════════════════════════════════════
+//  GROUP CHAT — full implementation
+// ══════════════════════════════════════════════════════════
+
+let _newGroupPhoto = null;
+let _newGroupSelected = new Set();
+
+// ── Home FAB menu ──────────────────────────────────────
+function showHomeMenu() {
+  const m = document.getElementById('home-menu');
+  const isOpen = m.style.display !== 'none';
+  m.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) setTimeout(()=>document.addEventListener('click', _hideMenuOutside, {once:true}), 50);
+}
+function hideHomeMenu() { document.getElementById('home-menu').style.display='none'; }
+function _hideMenuOutside(e) {
+  const m=document.getElementById('home-menu'), f=document.getElementById('fab-main');
+  if (!m?.contains(e.target) && !f?.contains(e.target)) hideHomeMenu();
+}
+
+// ── Create group screen ────────────────────────────────
+function openNewGroup() {
+  _newGroupPhoto = null;
+  _newGroupSelected = new Set();
+  document.getElementById('new-group-name').value = '';
+  const circle = document.getElementById('new-group-photo-circle');
+  circle.innerHTML = '📷';
+  circle.style.backgroundImage = '';
+
+  const el = document.getElementById('new-group-members');
+  const active = Object.entries(S.contacts).filter(([,c])=>c.status==='active');
+  if (!active.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Nenhum contato ativo</div>';
+  } else {
+    el.innerHTML = active.map(([hId,ct])=>`
+      <div id="gm-${hId}" onclick="toggleGMember('${hId}',this)"
+        style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border);background:var(--bg3);margin-bottom:6px;">
+        <div style="width:38px;height:38px;border-radius:50%;background:var(--bg2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:14px;flex-shrink:0;${ct.photo?'background-image:url('+ct.photo+');background-size:cover;background-position:center;':''}">
+          ${ct.photo?'':ct.name[0].toUpperCase()}
+        </div>
+        <span style="flex:1;color:var(--text);font-weight:500;font-size:14px;">${esc(ct.name)}</span>
+        <div id="gm-ck-${hId}" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;"></div>
+      </div>`).join('');
+  }
+  SS('new-group');
+}
+
+function toggleGMember(hId, row) {
+  if (_newGroupSelected.has(hId)) {
+    _newGroupSelected.delete(hId);
+    row.style.borderColor = 'var(--border)';
+    row.style.background = 'var(--bg3)';
+    const ck = document.getElementById('gm-ck-'+hId);
+    ck.innerHTML = ''; ck.style.background = 'transparent'; ck.style.borderColor = 'var(--border)';
+  } else {
+    if (_newGroupSelected.size >= 3) { showToast('Máximo 4 pessoas por grupo'); return; }
+    _newGroupSelected.add(hId);
+    row.style.borderColor = 'var(--accent)';
+    row.style.background = 'rgba(61,214,172,.08)';
+    const ck = document.getElementById('gm-ck-'+hId);
+    ck.innerHTML = '✓'; ck.style.background = 'var(--accent)'; ck.style.color = '#06100D'; ck.style.borderColor = 'var(--accent)';
+  }
+}
+
+function pickGroupPhoto() { document.getElementById('new-group-photo-input').click(); }
+
+function onGroupPhotoChange(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const s = Math.min(img.width, img.height, 400);
+      canvas.width = canvas.height = s;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, s, s);
+      _newGroupPhoto = canvas.toDataURL('image/jpeg', 0.82);
+      const circle = document.getElementById('new-group-photo-circle');
+      circle.style.backgroundImage = `url(${_newGroupPhoto})`;
+      circle.style.backgroundSize = 'cover'; circle.style.backgroundPosition = 'center';
+      circle.innerHTML = '';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function doCreateGroup() {
+  const name = document.getElementById('new-group-name').value.trim();
+  if (!name) { showToast('Digite o nome do grupo'); return; }
+  if (_newGroupSelected.size < 1) { showToast('Selecione ao menos 1 membro'); return; }
+
+  const groupId = 'GRP_' + rndHex(12).toUpperCase();
+  const groupKey = rndHex(32);
+  const members = [S.id.hashId, ..._newGroupSelected];
+
+  S.groups[groupId] = { name, photo:_newGroupPhoto, members, key:groupKey, createdAt:Date.now(), createdBy:S.id.hashId };
+  S.convs[groupId] = [];
+  saveDB();
+
+  // Send invite to each member
+  members.filter(m=>m!==S.id.hashId).forEach(hId=>{
+    send({ type:'GROUP_INVITE', to:hId, groupId, groupName:name,
+      groupPhoto:_newGroupPhoto||null, groupKey, members,
+      memberNames: Object.fromEntries(members.map(m=>[m, m===S.id.hashId?S.id.name:(S.contacts[m]?.name||m.slice(0,8))])),
+      fromName:S.id.name, ts:Date.now() });
+  });
+
+  updateConvList();
+  openGroupChat(groupId);
+}
+
+// ── Open group chat ────────────────────────────────────
+function openGroupChat(gId) {
+  const g = S.groups[gId]; if (!g) return;
+  S.currentChat = gId;
+  S.unread[gId] = 0;
+
+  document.getElementById('chat-name').textContent = g.name;
+  const topAv = document.getElementById('chat-avatar-top');
+  if (g.photo) {
+    topAv.style.backgroundImage = `url(${g.photo})`;
+    topAv.style.backgroundSize = 'cover';
+    topAv.style.backgroundPosition = 'center';
+    topAv.textContent = '';
+  } else {
+    topAv.style.backgroundImage = '';
+    topAv.textContent = '👥';
+    topAv.style.fontSize = '18px';
+  }
+  topAv.style.width='36px'; topAv.style.height='36px';
+
+  const memberNames = g.members.map(m=>m===S.id.hashId?'Você':(S.contacts[m]?.name||m.slice(0,8)));
+  document.getElementById('chat-status').textContent = memberNames.join(', ');
+
+  // Show group call button, hide 1-to-1 buttons
+  document.getElementById('btn-group-call').style.display='flex';
+  document.getElementById('btn-audio-call').style.display='none';
+  document.getElementById('btn-video-call').style.display='none';
+  renderMessages(gId);
+  document.getElementById('typing-indicator').classList.remove('show');
+  document.getElementById('msg-input').value='';
+  document.getElementById('send-btn').disabled=true;
+  SS('chat');
+  updateConvList();
+}
+
+// ── Send group message ─────────────────────────────────
+function sendGroupMsg(gId, content, type='text', extra={}) {
+  const g = S.groups[gId]; if (!g) return;
+  const id = genId(), ts = Date.now();
+  const msg = { id, from:'me', senderName:S.id.name, content, type, ts, status:'sent', ...extra };
+  if (!S.convs[gId]) S.convs[gId]=[];
+  S.convs[gId].push(msg);
+
+  const payload = { content, type, senderName:S.id.name, senderHash:S.id.hashId, extra };
+  const encrypted = enc(JSON.stringify(payload), g.key);
+
+  g.members.filter(m=>m!==S.id.hashId).forEach(hId=>{
+    send({ type:'GROUP_MSG', to:hId, groupId:gId, id, enc:encrypted, ts });
+  });
+
+  saveDB(); renderMessages(gId); scrollBottom(); updateConvList();
+}
+
+// ── Group info screen ──────────────────────────────────
+function openGroupInfo() {
+  const gId = S.currentChat;
+  const g = S.groups[gId]; if (!g) return;
+
+  document.getElementById('gi-name').textContent = g.name;
+  document.getElementById('gi-count').textContent = g.members.length + ' membros';
+  const photo = document.getElementById('gi-photo');
+  if (g.photo) { photo.style.backgroundImage=`url(${g.photo})`; photo.textContent=''; }
+  else { photo.style.backgroundImage=''; photo.textContent='👥'; }
+
+  document.getElementById('gi-members').innerHTML = g.members.map(m=>{
+    const isMe = m===S.id.hashId;
+    const name = isMe ? 'Você' : (S.contacts[m]?.name||m.slice(0,8));
+    const photo = isMe ? (S.id.photo||null) : (S.contacts[m]?.photo||null);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${photo?'background-image:url('+photo+');background-size:cover;background-position:center;':''}">
+        ${photo?'':name[0].toUpperCase()}
+      </div>
+      <div style="flex:1;">
+        <div style="color:var(--text);font-weight:600;">${esc(name)}</div>
+        ${m===g.createdBy?'<div style="font-size:11px;color:var(--accent);">Criador</div>':''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('gi-add-btn').style.display = g.createdBy===S.id.hashId ? 'block' : 'none';
+  SS('group-info');
+}
+
+function showAddMemberToGroup() {
+  const gId = S.currentChat, g = S.groups[gId]; if (!g) return;
+  const available = Object.entries(S.contacts).filter(([hId,ct])=>ct.status==='active'&&!g.members.includes(hId));
+  if (!available.length) { showToast('Todos os contatos já estão no grupo'); return; }
+  if (g.members.length >= 4) { showToast('Máximo 4 membros atingido'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'add-member-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:3000;display:flex;align-items:flex-end;';
+  overlay.innerHTML = `<div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:60vh;overflow-y:auto;padding-bottom:24px;">
+    <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;color:var(--text);">Adicionar ao grupo</span>
+      <button onclick="document.getElementById('add-member-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+    </div>
+    ${available.map(([hId,ct])=>`
+      <div onclick="addMemberToGroup('${hId}')" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);">
+        <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${ct.photo?'background-image:url('+ct.photo+');background-size:cover;background-position:center;':''}">
+          ${ct.photo?'':ct.name[0].toUpperCase()}
+        </div>
+        <span style="color:var(--text);font-weight:500;">${esc(ct.name)}</span>
+      </div>`).join('')}
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function addMemberToGroup(hId) {
+  document.getElementById('add-member-modal')?.remove();
+  const gId=S.currentChat, g=S.groups[gId]; if(!g) return;
+  if (g.members.includes(hId)) { showToast('Já é membro'); return; }
+  g.members.push(hId); saveDB();
+  send({ type:'GROUP_INVITE', to:hId, groupId:gId, groupName:g.name,
+    groupPhoto:g.photo||null, groupKey:g.key, members:g.members,
+    memberNames:Object.fromEntries(g.members.map(m=>[m,m===S.id.hashId?S.id.name:(S.contacts[m]?.name||m.slice(0,8))])),
+    fromName:S.id.name, ts:Date.now() });
+  g.members.filter(m=>m!==S.id.hashId&&m!==hId).forEach(m=>{
+    send({ type:'GROUP_MEMBER_ADDED', to:m, groupId:gId, newMemberHash:hId, newMemberName:S.contacts[hId]?.name||hId.slice(0,8) });
+  });
+  showToast((S.contacts[hId]?.name||'Membro') + ' adicionado!');
+  openGroupInfo();
+}
+
+function leaveGroup() {
+  const gId=S.currentChat, g=S.groups[gId]; if(!g) return;
+  if (!confirm('Sair do grupo "'+g.name+'"?')) return;
+  g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
+    send({ type:'GROUP_MEMBER_LEFT', to:m, groupId:gId, memberHash:S.id.hashId });
+  });
+  delete S.groups[gId]; delete S.convs[gId];
+  saveDB(); updateConvList(); SS('home');
+}
+
+// ── Handle incoming GROUP packets ──────────────────────
+function handleGroupPacket(pkt, from) {
+  switch(pkt.type) {
+    case 'GROUP_INVITE': {
+      if (S.groups[pkt.groupId]) break;
+      S.groups[pkt.groupId] = { name:pkt.groupName, photo:pkt.groupPhoto||null,
+        members:pkt.members, key:pkt.groupKey, createdAt:pkt.ts||Date.now(), createdBy:from };
+      if (!S.convs[pkt.groupId]) S.convs[pkt.groupId]=[];
+      saveDB(); updateConvList();
+      showToast('Você entrou no grupo "'+pkt.groupName+'"');
+      playNotifSound(); break;
+    }
+    case 'GROUP_MSG': {
+      const g = S.groups[pkt.groupId]; if (!g) break;
+      let plain; try { plain=dec(pkt.enc, g.key); } catch { break; }
+      if (!plain) break;
+      let data; try { data=JSON.parse(plain); } catch { break; }
+      const msg = { id:pkt.id, from:data.senderHash||from, senderName:data.senderName||from.slice(0,8),
+        content:data.content, type:data.type||'text', ts:pkt.ts||Date.now(), status:'received',
+        ...(data.extra||{}) };
+      if (!S.convs[pkt.groupId]) S.convs[pkt.groupId]=[];
+      if (!S.convs[pkt.groupId].find(m=>m.id===msg.id)) {
+        S.convs[pkt.groupId].push(msg); saveDB();
+        if (S.currentChat===pkt.groupId) renderMessages(pkt.groupId);
+        else { S.unread[pkt.groupId]=(S.unread[pkt.groupId]||0)+1; playNotifSound(); }
+        updateConvList();
+      }
+      break;
+    }
+    case 'GROUP_MEMBER_ADDED': {
+      const g=S.groups[pkt.groupId]; if(!g) break;
+      if (!g.members.includes(pkt.newMemberHash)) { g.members.push(pkt.newMemberHash); saveDB(); }
+      showToast(pkt.newMemberName+' entrou no grupo'); break;
+    }
+    case 'GROUP_MEMBER_LEFT': {
+      const g=S.groups[pkt.groupId]; if(!g) break;
+      g.members=g.members.filter(m=>m!==pkt.memberHash); saveDB();
+      showToast('Um membro saiu do grupo'); break;
+    }
+  }
+}
+
 function setBubbleColor(who, bg, bd) {
   const root = document.documentElement;
   if (who === 'me') {
@@ -977,35 +1290,46 @@ function loadId()   { const r=localStorage.getItem('NX_ID'); return r?JSON.parse
 
 // ── WEBSOCKET ──────────────────────────────────────────
 function initWS(url, onReady) {
-  if (S.ws) { try { S.ws.close(); } catch{} }
+  // Prevent multiple simultaneous connection attempts
+  if (S._wsConnecting) return;
+  S._wsConnecting = true;
+
+  // Cleanly close old socket WITHOUT triggering auto-reconnect
+  if (S.ws) {
+    S.ws._manualClose = true;
+    try { S.ws.close(); } catch{}
+    S.ws = null;
+  }
+  clearTimeout(S.wsReconnectTimer);
+  clearInterval(S.retryTimer);
   S.wsReady = false;
   setStatus('connecting');
 
   let ws;
   try { ws = new WebSocket(url); }
-  catch(e) { setStatus('offline'); return; }
+  catch(e) { S._wsConnecting = false; setStatus('offline'); scheduleReconnect(); return; }
 
   S.ws = ws;
 
   ws.onopen = () => {
+    S._wsConnecting = false;
     S.wsReady = true;
     S.wsRetryCount = 0;
-    ws.send(JSON.stringify({ type:'REGISTER', id: S.id.hashId }));
+    // Register no servidor relay
+    const regPkt = { type:'REGISTER', id: S.id.hashId };
+    ws.send(JSON.stringify(regPkt));
     setStatus('online');
-    clearInterval(S.retryTimer);
-    // Aggressive ping every 15s to keep connection alive on mobile
+    // Ping every 20s to keep alive on mobile
     S.retryTimer = setInterval(() => {
-      if (ws.readyState !== WebSocket.OPEN) {
-        clearInterval(S.retryTimer);
-        return;
-      }
-      ws.send(JSON.stringify({ type:'PING' }));
-    }, 15000);
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type:'PING' }));
+      else { clearInterval(S.retryTimer); }
+    }, 20000);
     if (onReady) onReady();
-    // Keep Render server awake with HTTP ping every 10min
-    if (!S._keepAliveTimer) {
+    // Keep server awake every 10min (útil para Render/Railway que adormecem)
+    if (!S._keepAliveTimer && S.id?.serverUrl) {
+      const healthUrl = S.id.serverUrl.replace(/^wss?:\/\//, 'https://').replace(/\/.*$/, '/health');
       S._keepAliveTimer = setInterval(() => {
-        fetch('https://nexo-relay.onrender.com/health').catch(()=>{});
+        fetch(healthUrl).catch(()=>{});
       }, 10 * 60 * 1000);
     }
   };
@@ -1016,20 +1340,44 @@ function initWS(url, onReady) {
   };
 
   ws.onclose = () => {
+    S._wsConnecting = false;
+    // If we closed it manually (e.g. reconnect), don't loop
+    if (ws._manualClose) return;
     S.wsReady = false;
-    setStatus('offline');
+    S.ws = null;
     clearInterval(S.retryTimer);
-    // Exponential backoff reconnect
-    const delay = Math.min((S.wsRetryCount||0) * 1000 + 1000, 8000);
-    S.wsRetryCount = (S.wsRetryCount||0) + 1;
-    S.wsReconnectTimer = setTimeout(() => { if (S.id) initWS(S.id.serverUrl); }, delay);
+    setStatus('offline');
+    scheduleReconnect();
   };
 
   ws.onerror = () => {
+    S._wsConnecting = false;
     S.wsReady = false;
     setStatus('offline');
+    // onclose will fire after onerror, handles reconnect
   };
 }
+
+// initFCM removido — era código Capacitor/APK, não funciona na web PWA
+
+function scheduleReconnect() {
+  clearTimeout(S.wsReconnectTimer);
+  // Don't reconnect if app is in background — wait for visibility
+  if (document.hidden) return;
+  const delay = Math.min(((S.wsRetryCount||0) + 1) * 1500, 10000);
+  S.wsRetryCount = (S.wsRetryCount||0) + 1;
+  S.wsReconnectTimer = setTimeout(() => {
+    if (S.id && !S.wsReady) initWS(S.id.serverUrl);
+  }, delay);
+}
+
+// Reconectar ao voltar para o app (tab/browser)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && S.id && !S.wsReady) {
+    S.wsRetryCount = 0;
+    scheduleReconnect();
+  }
+});
 
 function send(pkt) {
   if (S.ws && S.ws.readyState === WebSocket.OPEN) {
@@ -1185,6 +1533,7 @@ function handlePacket(pkt) {
       }
       break;
     case 'CALL_REJECT':
+      if (CALL._ringInterval) { clearInterval(CALL._ringInterval); CALL._ringInterval = null; }
       showToast('Chamada recusada'); endCall(); break;
     case 'CALL_END':
       showToast('Chamada encerrada'); endCall(); break;
@@ -1199,6 +1548,12 @@ function handlePacket(pkt) {
     case 'GC_MEMBERS':
     case 'GC_HELLO':
       handleGCPacket(pkt, from);
+      break;
+    case 'GROUP_INVITE':
+    case 'GROUP_MSG':
+    case 'GROUP_MEMBER_ADDED':
+    case 'GROUP_MEMBER_LEFT':
+      handleGroupPacket(pkt, from);
       break;
   }
 }
@@ -1281,7 +1636,8 @@ function retrySend(toHashId, msg) {
 // ── ACCOUNT ────────────────────────────────────────────
 function createAccount() {
   const name   = document.getElementById('new-name-input').value.trim() || 'Usuario';
-  const server = 'wss://nexo-relay.onrender.com';
+  // Usa URL salva em settings, ou padrão
+  const server = (S._pendingServerUrl || 'wss://nexo-relay2.onrender.com').trim();
   const avatarEl = document.getElementById('avatar-preview');
   const photo = avatarEl.dataset.photo || null;
   const id = {
@@ -1298,7 +1654,7 @@ function createAccount() {
 function restoreAccount() {
   const hash   = document.getElementById('restore-hash-input').value.trim().toUpperCase();
   const name   = document.getElementById('restore-name-input').value.trim() || 'Usuario';
-  const server = 'wss://nexo-relay.onrender.com';
+  const server = (S._pendingServerUrl || 'wss://nexo-relay2.onrender.com').trim();
   if (!hash.match(/^[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}$/)) { showToast('Hash invalido'); return; }
   const id = { hashId:hash, name, privateKey:rndHex(32), deviceId:rndHex(8), serverUrl:server, createdAt:Date.now(), restored:true };
   S.id=id; saveId(id); loadDB();
@@ -1414,6 +1770,10 @@ function updateInviteBanner() {
 // ── CHAT ───────────────────────────────────────────────
 function openChat(hId) {
   S.currentChat=hId; S.unread[hId]=0;
+  // Show 1-to-1 call buttons, hide group call button
+  document.getElementById('btn-group-call').style.display='none';
+  document.getElementById('btn-audio-call').style.display='flex';
+  document.getElementById('btn-video-call').style.display='flex';
   const c=S.contacts[hId];
   document.getElementById('chat-name').textContent=c.name;
   const topAv=document.getElementById('chat-avatar-top');
@@ -1481,18 +1841,22 @@ function renderMessages(hId) {
     } else {
       inner=esc(m.content)+meta;
     }
+    // Show sender name in group chats
+    const isGroup = !!S.groups[hId];
+    const senderLabel = (!isMe && isGroup) ? `<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px;">${esc(m.senderName||S.contacts[m.from]?.name||'')}</div>` : '';
     return `${showDate?`<div class="date-sep"><span>${fmtDate(m.ts)}</span></div>`:''}
-    <div class="msg-row ${isMe?'me':'them'}"><div class="bubble">${inner}</div></div>`;
+    <div class="msg-row ${isMe?'me':'them'}" id="msgrow-${m.id}" oncontextmenu="selectMsg(event,'${hId}','${m.id}')" ontouchstart="startLongPress(event,'${hId}','${m.id}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="bubble">${senderLabel}${inner}</div></div>`;
   }).join('');
   if(atBot||msgs.length<=10) scrollBottom();
 }
 
 function buildAudio(m) {
   const dur=m.duration||0, mm=Math.floor(dur/60), ss=String(dur%60).padStart(2,'0');
-  const bars=Array.from({length:18},(_,i)=>`<span style="height:${5+Math.round(Math.abs(Math.sin(i*0.8+(m.id?.charCodeAt(0)||0)*0.1))*10)}px"></span>`).join('');
-  return `<button class="play-btn" onclick="playAudio('${m.id}',this)"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
-  <div class="audio-waveform">${bars}</div>
-  <span class="audio-dur">${mm}:${ss}</span>`;
+  const bars=Array.from({length:22},(_,i)=>`<span style="height:${4+Math.round(Math.abs(Math.sin(i*0.75+(m.id?.charCodeAt(0)||0)*0.1))*13)}px"></span>`).join('');
+  const isPlaying = _currentAudioMsgId === m.id;
+  return `<button class="play-btn${isPlaying?' playing':''}" data-audioid="${m.id}" onclick="playAudio('${m.id}',this)">${isPlaying?'<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>':'<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>'}</button>
+  <div class="audio-waveform" id="awv-${m.id}" onclick="seekAudio(event,'${m.id}')">${bars}<div class="audio-progress" id="apr-${m.id}"></div></div>
+  <span class="audio-dur" id="adt-${m.id}">${mm}:${ss}</span>`;
 }
 
 function openImg(msgId) {
@@ -1514,18 +1878,133 @@ function downloadImg(msgId) {
   a.click();
 }
 
+// ── DELETE MESSAGE ─────────────────────────────────────
+let _selectedMsg = null;
+let _longPressTimer = null;
+
+function startLongPress(e, hId, msgId) {
+  _longPressTimer = setTimeout(() => { selectMsg(e, hId, msgId); }, 500);
+}
+function cancelLongPress() { clearTimeout(_longPressTimer); }
+
+function selectMsg(e, hId, msgId) {
+  e.preventDefault();
+  clearTimeout(_longPressTimer);
+  // Vibrate for feedback
+  if (navigator.vibrate) navigator.vibrate(40);
+  _selectedMsg = { hId, msgId };
+  // Highlight row
+  document.querySelectorAll('.msg-row.selected').forEach(r=>r.classList.remove('selected'));
+  const row = document.getElementById('msgrow-'+msgId);
+  if (row) row.classList.add('selected');
+  document.getElementById('delete-bar').classList.add('show');
+}
+
+function cancelDeleteMsg() {
+  _selectedMsg = null;
+  document.querySelectorAll('.msg-row.selected').forEach(r=>r.classList.remove('selected'));
+  document.getElementById('delete-bar').classList.remove('show');
+}
+
+function confirmDeleteMsg() {
+  if (!_selectedMsg) return;
+  const { hId, msgId } = _selectedMsg;
+  if (S.convs[hId]) {
+    S.convs[hId] = S.convs[hId].filter(m => m.id !== msgId);
+    saveDB();
+    renderMessages(hId);
+  }
+  cancelDeleteMsg();
+}
+
+let _currentAudio = null;
+let _currentAudioMsgId = null;
+
+const PLAY_ICON = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+function _setAudioBtnState(msgId, playing) {
+  const btn = document.querySelector(`[data-audioid="${msgId}"]`);
+  if (!btn) return;
+  btn.classList.toggle('playing', playing);
+  btn.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
+}
+
+function stopCurrentAudio() {
+  if (_currentAudio) {
+    if (_audioAnimFrame) { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = null; }
+    const id = _currentAudioMsgId;
+    _currentAudio.pause();
+    _currentAudio.currentTime = 0;
+    _currentAudio.onended = null;
+    _currentAudio.onplay = null;
+    _setAudioBtnState(id, false);
+    // Reset progress UI
+    const bar = document.getElementById('apr-' + id);
+    if (bar) bar.style.width = '0%';
+    const wv = document.getElementById('awv-' + id);
+    if (wv) wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
+    // Restore full duration in timer
+    const m = Object.values(S.convs).flat().find(x=>x.id===id);
+    const timer = document.getElementById('adt-' + id);
+    if (timer && m) { const dur=m.duration||0,mm=Math.floor(dur/60),ss=String(dur%60).padStart(2,'0'); timer.textContent=mm+':'+ss; }
+    _currentAudio = null;
+    _currentAudioMsgId = null;
+  }
+}
+
+let _audioAnimFrame = null;
+
+function _updateAudioProgress() {
+  if (!_currentAudio || !_currentAudioMsgId) return;
+  const audio = _currentAudio;
+  const dur = audio.duration || 0;
+  const cur = audio.currentTime || 0;
+  const pct = dur > 0 ? (cur / dur) * 100 : 0;
+
+  const bar = document.getElementById('apr-' + _currentAudioMsgId);
+  if (bar) bar.style.width = pct + '%';
+
+  // Time display: show elapsed
+  const timer = document.getElementById('adt-' + _currentAudioMsgId);
+  if (timer) {
+    const mm = Math.floor(cur/60), ss = String(Math.floor(cur%60)).padStart(2,'0');
+    timer.textContent = mm + ':' + ss;
+  }
+
+  // Highlight bars
+  const wv = document.getElementById('awv-' + _currentAudioMsgId);
+  if (wv) {
+    const spans = wv.querySelectorAll('span');
+    const count = spans.length;
+    spans.forEach((sp, i) => sp.classList.toggle('played', i < Math.floor(pct / 100 * count)));
+  }
+
+  if (!audio.paused) _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
+}
+
+function seekAudio(e, msgId) {
+  if (_currentAudioMsgId !== msgId || !_currentAudio) return;
+  const wv = document.getElementById('awv-' + msgId);
+  if (!wv) return;
+  const rect = wv.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  _currentAudio.currentTime = _currentAudio.duration * pct;
+}
+
 function playAudio(msgId, btn) {
-  const all=Object.values(S.convs).flat();
-  const m=all.find(x=>x.id===msgId);
-  if(!m?.audioB64) return;
-  const audio=new Audio(`data:${m.audioMime||'audio/webm'};base64,${m.audioB64}`);
-  btn.classList.add('playing');
-  btn.innerHTML='<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-  audio.play().catch(()=>{});
-  audio.onended=()=>{
-    btn.classList.remove('playing');
-    btn.innerHTML='<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-  };
+  if (_currentAudioMsgId === msgId) { stopCurrentAudio(); return; }
+  stopCurrentAudio();
+  const all = Object.values(S.convs).flat();
+  const m = all.find(x => x.id === msgId);
+  if (!m?.audioB64) return;
+  const audio = new Audio(`data:${m.audioMime||'audio/webm'};base64,${m.audioB64}`);
+  _currentAudio = audio;
+  _currentAudioMsgId = msgId;
+  _setAudioBtnState(msgId, true);
+  audio.play().catch(() => { stopCurrentAudio(); });
+  audio.onended = () => { stopCurrentAudio(); };
+  audio.onplay = () => { _audioAnimFrame = requestAnimationFrame(_updateAudioProgress); };
 }
 
 // ── SEND TEXT ──────────────────────────────────────────
@@ -1544,6 +2023,8 @@ function sendTextMessage() {
   const input=document.getElementById('msg-input');
   const text=input.value.trim();
   if(!text||!S.currentChat) return;
+  // Route to group or 1-to-1
+  if (S.groups[S.currentChat]) { sendGroupMsg(S.currentChat, text, 'text'); input.value=''; input.style.height=''; document.getElementById('send-btn').disabled=true; return; }
   const hId=S.currentChat, c=S.contacts[hId];
   if(!c) return;
   const id=genId(), ts=Date.now();
@@ -1598,7 +2079,9 @@ function handleImageSelected(input) {
 }
 
 function sendImageMsg(b64, mime) {
-  const hId = S.currentChat, ct = S.contacts[hId];
+  const hId = S.currentChat;
+  if (S.groups[hId]) { sendGroupMsg(hId, '', 'image', {imgB64:b64, imgMime:mime}); return; }
+  const ct = S.contacts[hId];
   if (!ct) return;
   const id = genId(), ts = Date.now();
   // Check size — if too big for single WS frame, warn
@@ -1669,8 +2152,9 @@ function sendAudioMsg(blob, dur) {
     pushMsg(hId, msg);
     renderMessages(hId); scrollBottom();
     const sent=send({type:'AUDIO', to:hId, id, enc:e2, ts});
-    msg.status=sent?'queued':'queued';
-    if(!sent) showToast('Audio na fila');
+    msg.status='queued';
+    if (sent) scheduleAckTimeout(hId, id, 45000);
+    else showToast('Audio na fila — reenviando automaticamente');
     saveDB(); renderMessages(hId);
   };
   reader.readAsDataURL(blob);
@@ -1731,6 +2215,7 @@ function declineInvite(idx) {
 
 // ── CHAT MENU ──────────────────────────────────────────
 function openChatMenu() {
+  if (S.groups[S.currentChat]) { openGroupInfo(); return; }
   const hId=S.currentChat, c=S.contacts[hId];
   showModal(`Conversa com ${c.name}`, hId, [
     {label:'Apagar conversa', style:'danger', action:()=>{ S.convs[hId]=[]; S.unread[hId]=0; saveDB(); renderMessages(hId); closeModal(); showToast('Conversa apagada');}},
@@ -1823,7 +2308,7 @@ function confirmDeleteAccount() {
 function pushMsg(hId, msg) { if(!S.convs[hId]) S.convs[hId]=[]; S.convs[hId].push(msg); }
 function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
 function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>'); }
 function fmtTime(ts) {
   const d=new Date(ts),now=new Date(),diff=now-d;
   if(diff<60000) return 'agora';
@@ -2182,35 +2667,34 @@ function toggleCam() {
 
 async function toggleSpeaker() {
   CALL.isSpeaker = !CALL.isSpeaker;
-  document.getElementById('btn-speaker').classList.toggle('active', CALL.isSpeaker);
-
+  const btn = document.getElementById('btn-speaker');
+  btn.classList.toggle('active', CALL.isSpeaker);
   const ra = document.getElementById('remote-audio');
   if (!ra) return;
 
-  if (CALL.isSpeaker) {
-    // Force speaker: use AudioContext to route stream to speakers
-    try {
-      if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx = null; }
-      ra.srcObject = null; // detach from audio element (stops earpiece)
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      await ctx.resume();
-      const src = ctx.createMediaStreamSource(CALL.remoteStream);
-      src.connect(ctx.destination); // routes to speaker
-      CALL._speakerCtx = ctx;
-      showToast('🔊 Viva voz ativado');
-    } catch(e) {
-      console.warn('[SPEAKER]', e.message);
-      // Fallback: try setSinkId
-      if (ra.setSinkId) {
-        try { await ra.setSinkId(''); ra.srcObject = CALL.remoteStream; } catch(e2) {}
-      }
-      showToast('🔊 Viva voz ativado');
+  if (!CALL.isSpeaker) {
+    // Switch to earpiece via setSinkId (only works on some browsers/Android)
+    if (ra.setSinkId) {
+      try {
+        await ra.setSinkId(''); // empty = default (earpiece on mobile)
+        showToast('🔈 Fone de ouvido');
+        return;
+      } catch(e) {}
     }
+    // Fallback: can't switch to earpiece, revert toggle
+    CALL.isSpeaker = true;
+    btn.classList.add('active');
+    showToast('Troca de saída não suportada neste dispositivo');
   } else {
-    // Back to earpiece: close AudioContext and use audio element
-    if (CALL._speakerCtx) { CALL._speakerCtx.close(); CALL._speakerCtx = null; }
-    ra.srcObject = CALL.remoteStream;
-    showToast('🔈 Fone de ouvido');
+    // Switch back to speaker
+    if (ra.setSinkId) {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const speaker = devices.find(d => d.kind==='audiooutput' && /speaker/i.test(d.label));
+        await ra.setSinkId(speaker ? speaker.deviceId : '');
+      } catch(e) {}
+    }
+    showToast('🔊 Viva voz ativado');
   }
 }
 
@@ -2391,18 +2875,18 @@ function removePin() {
 // Lock on visibility change (app goes to background)
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && S.id) {
-    // App came back to foreground — check connection
-    if (!S.wsReady || !S.ws || S.ws.readyState !== WebSocket.OPEN) {
-      console.log('[WS] App resumed, reconnecting...');
+    // App came back to foreground
+    if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+      // Still connected — just re-register to flush missed packets
+      S.ws.send(JSON.stringify({ type:'REGISTER', id: S.id.hashId }));
+    } else if (!S._wsConnecting) {
+      // Not connected and not already trying — reconnect now
+      S.wsRetryCount = 0; // reset backoff on manual foreground
       clearTimeout(S.wsReconnectTimer);
       initWS(S.id.serverUrl);
-    } else {
-      // Still connected — re-register to flush any missed packets
-      S.ws.send(JSON.stringify({ type:'REGISTER', id: S.id.hashId }));
     }
+    if (LOCK.enabled) { showLock(); tryBiometric(); }
   }
-  if (document.hidden) return;
-  if (LOCK.enabled) { showLock(); tryBiometric(); }
 });
 
 // ── NOTIFICATIONS ──────────────────────────────────────
