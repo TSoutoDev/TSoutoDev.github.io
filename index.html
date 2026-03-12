@@ -2201,12 +2201,19 @@ function copyToClipboard(text) {
   });
 }
 
-// Abre tela de adicionar contato já preenchida com hash e nome do card
+// Abre tela de adicionar contato já preenchida com hash e nome do card — sem confirm, vai direto
 function addContactFromCard(hash, name) {
-  nexoConfirm('Adicionar "' + name + '" como contato?', () => {
-    window._addCardPrefill = { hash, name };
-    SS('add');
-  }, null, 'Adicionar', 'Cancelar');
+  // Se já é contato ativo, apenas abre a conversa
+  if (S.contacts[hash] && S.contacts[hash].status === 'active') {
+    openChat(hash); return;
+  }
+  window._addCardPrefill = { hash, name };
+  SS('add');
+  // Foca no botão de enviar convite após a tela abrir
+  setTimeout(() => {
+    const btn = document.getElementById('send-invite-btn');
+    if (btn) btn.focus();
+  }, 280);
 }
 
 // ── COMPARTILHAR HASH DO CONTATO (da conv-list) ────────
@@ -2316,8 +2323,9 @@ function confirmDeleteMsg() {
 
 let _currentAudio = null;
 let _currentAudioMsgId = null;
+let _audioInterval = null; // setInterval — driver principal de progresso
 
-const PLAY_ICON = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+const PLAY_ICON  = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 const PAUSE_ICON = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 
 function _setAudioBtnState(msgId, playing) {
@@ -2327,29 +2335,59 @@ function _setAudioBtnState(msgId, playing) {
   btn.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
 }
 
+function _stopAudioInterval() {
+  if (_audioInterval) { clearInterval(_audioInterval); _audioInterval = null; }
+}
+
+function _updateAudioProgress() {
+  const audio = _currentAudio;
+  const msgId = _currentAudioMsgId;
+  if (!audio || !msgId) return;
+
+  // duration pode ser Infinity no início em alguns codecs — fallback na duração salva
+  const savedDur = Object.values(S.convs).flat().find(x => x.id === msgId)?.duration || 0;
+  const dur = (isFinite(audio.duration) && audio.duration > 0) ? audio.duration : savedDur;
+  const cur = Math.min(audio.currentTime || 0, dur || 0);
+  const pct = dur > 0 ? cur / dur : 0;
+
+  const bar = document.getElementById('apr-' + msgId);
+  if (bar) bar.style.width = (pct * 100).toFixed(1) + '%';
+
+  const timer = document.getElementById('adt-' + msgId);
+  if (timer) {
+    const rem = Math.max(0, (dur || 0) - cur);
+    timer.textContent = Math.floor(rem / 60) + ':' + String(Math.floor(rem % 60)).padStart(2, '0');
+  }
+
+  const wv = document.getElementById('awv-' + msgId);
+  if (wv) {
+    const spans = wv.querySelectorAll('span');
+    const filled = Math.round(pct * spans.length);
+    spans.forEach((sp, i) => sp.classList.toggle('played', i < filled));
+  }
+}
+
 function stopCurrentAudio(fromEnd) {
   if (!_currentAudio) return;
-  cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = null;
-  const id = _currentAudioMsgId;
+  _stopAudioInterval();
+  const id    = _currentAudioMsgId;
   const audio = _currentAudio;
-  // Zera refs PRIMEIRO para bloquear qualquer frame pendente
   _currentAudio = null;
   _currentAudioMsgId = null;
-  audio.onended = null; audio.onplay = null; audio.onloadedmetadata = null; audio.ontimeupdate = null;
+  audio.onended = null; audio.onplay = null; audio.onpause = null; audio.onerror = null;
   audio.pause();
   _setAudioBtnState(id, false);
-  // Reset visual
-  const bar = document.getElementById('apr-' + id);
-  const wv  = document.getElementById('awv-' + id);
-  const timer = document.getElementById('adt-' + id);
-  const m = Object.values(S.convs).flat().find(x => x.id === id);
-  const dur = m?.duration || 0;
-  const durTxt = Math.floor(dur/60) + ':' + String(Math.floor(dur%60)).padStart(2,'0');
+
+  const m      = Object.values(S.convs).flat().find(x => x.id === id);
+  const dur    = m?.duration || 0;
+  const durTxt = Math.floor(dur / 60) + ':' + String(Math.floor(dur % 60)).padStart(2, '0');
+  const bar    = document.getElementById('apr-' + id);
+  const wv     = document.getElementById('awv-' + id);
+  const timer  = document.getElementById('adt-' + id);
 
   if (fromEnd) {
-    // Terminou: barra cheia, timer 0:00, depois de 1s reseta
-    if (bar) bar.style.width = '100%';
-    if (wv)  wv.querySelectorAll('span').forEach(sp => sp.classList.add('played'));
+    if (bar)   bar.style.width = '100%';
+    if (wv)    wv.querySelectorAll('span').forEach(sp => sp.classList.add('played'));
     if (timer) timer.textContent = '0:00';
     setTimeout(() => {
       const b = document.getElementById('apr-' + id);
@@ -2360,41 +2398,10 @@ function stopCurrentAudio(fromEnd) {
       if (t) t.textContent = durTxt;
     }, 1200);
   } else {
-    // Parou manualmente: reseta tudo imediatamente
-    if (bar) bar.style.width = '0%';
-    if (wv)  wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
+    if (bar)   bar.style.width = '0%';
+    if (wv)    wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
     if (timer) timer.textContent = durTxt;
   }
-}
-
-let _audioAnimFrame = null;
-
-function _updateAudioProgress() {
-  if (!_currentAudio || !_currentAudioMsgId) return; // parou — ignora
-  const audio = _currentAudio;
-  const msgId = _currentAudioMsgId;
-  const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration
-    : (Object.values(S.convs).flat().find(x=>x.id===msgId)?.duration || 0);
-  const cur = Math.min(audio.currentTime || 0, dur);
-
-  const bar = document.getElementById('apr-' + msgId);
-  if (bar) bar.style.width = (dur > 0 ? (cur/dur*100) : 0).toFixed(1) + '%';
-
-  const timer = document.getElementById('adt-' + msgId);
-  if (timer) {
-    const rem = Math.max(0, dur - cur);
-    timer.textContent = Math.floor(rem/60) + ':' + String(Math.floor(rem%60)).padStart(2,'0');
-  }
-
-  const wv = document.getElementById('awv-' + msgId);
-  if (wv) {
-    const spans = wv.querySelectorAll('span');
-    const filled = dur > 0 ? Math.round(cur/dur * spans.length) : 0;
-    spans.forEach((sp,i) => sp.classList.toggle('played', i < filled));
-  }
-
-  if (!audio.paused && _currentAudio === audio)
-    _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
 }
 
 function seekAudio(e, msgId) {
@@ -2402,35 +2409,38 @@ function seekAudio(e, msgId) {
   const wv = document.getElementById('awv-' + msgId);
   if (!wv) return;
   const rect = wv.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  if (isFinite(_currentAudio.duration)) _currentAudio.currentTime = _currentAudio.duration * pct;
+  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  if (isFinite(_currentAudio.duration)) {
+    _currentAudio.currentTime = _currentAudio.duration * pct;
+    _updateAudioProgress(); // atualiza visual imediatamente após seek
+  }
 }
 
 function playAudio(msgId) {
   if (_currentAudioMsgId === msgId) { stopCurrentAudio(); return; }
   stopCurrentAudio();
-  const all = Object.values(S.convs).flat();
-  const m = all.find(x => x.id === msgId);
+
+  const m = Object.values(S.convs).flat().find(x => x.id === msgId);
   if (!m?.audioB64) return;
-  const audio = new Audio(`data:${m.audioMime||'audio/webm'};base64,${m.audioB64}`);
-  _currentAudio = audio;
+
+  const audio = new Audio(`data:${m.audioMime || 'audio/webm'};base64,${m.audioB64}`);
+  _currentAudio      = audio;
   _currentAudioMsgId = msgId;
   _setAudioBtnState(msgId, true);
+
   const bar = document.getElementById('apr-' + msgId);
   if (bar) bar.style.width = '0%';
-  // timeupdate: evento nativo que dispara a cada ~250ms durante reprodução
-  // Mais confiável que rAF em mobile/PWA
-  audio.ontimeupdate = () => {
-    if (_currentAudio !== audio) return; // já parou
-    _updateAudioProgress();
+
+  // setInterval a 100ms: simples, sem depender de eventos do codec
+  // Arranca no onplay (quando o browser confirma que está tocando)
+  audio.onplay = () => {
+    _stopAudioInterval();
+    _audioInterval = setInterval(_updateAudioProgress, 100);
   };
+  audio.onpause = () => _stopAudioInterval();
   audio.onended = () => stopCurrentAudio(true);
   audio.onerror = () => stopCurrentAudio();
-  // Inicia animação via rAF também para smoothness
-  audio.onplay = () => {
-    cancelAnimationFrame(_audioAnimFrame);
-    _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
-  };
+
   audio.play().catch(() => stopCurrentAudio());
 }
 
@@ -2984,9 +2994,7 @@ function saveName() {
   const n = document.getElementById('edit-name-input').value.trim();
   if (!n) { showToast('Nome não pode ser vazio'); return; }
   S.id.name = n; saveId(S.id);
-  // Fecha o campo ANTES de atualizar a UI (evita flicker)
-  document.getElementById('profile-name-edit').style.display = 'none';
-  document.getElementById('profile-name-row').style.display = 'flex';
+  cancelEditName(); // fecha o campo primeiro
   updateProfileUI(); updateMyAvatar();
   showToast('Nome atualizado ✓');
 }
@@ -3024,10 +3032,6 @@ function changeProfilePhoto(input) {
     updateMyAvatar();
     showToast('Foto atualizada');
   });
-}
-function saveName() {
-  const n=document.getElementById('edit-name-input').value.trim();
-  if(!n) return; S.id.name=n; saveId(S.id); updateProfileUI(); showToast('Nome atualizado');
 }
 function copyMyHash() {
   const h=S.id?.hashId; if(!h) return;
