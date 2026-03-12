@@ -1707,6 +1707,7 @@ function updateNotifStatusUI() {
   if (S._pushSub) { el.textContent = 'Ativo ✓'; el.style.color = 'var(--accent)'; }
   else { el.textContent = 'Inativo'; el.style.color = 'var(--muted)'; }
 }
+async function unsubscribeWebPush() {
   if (!S._pushSub) return;
   try {
     const serverBase = S.id.serverUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '');
