@@ -1,0 +1,16 @@
+{
+  "name": "nexo-relay",
+  "version": "1.0.0",
+  "description": "Nexo relay server — E2E encrypted messages",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "web-push": "^3.6.7"
+  }
+}
