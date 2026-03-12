@@ -15,7 +15,8 @@
  */
 
 const WebSocket = require('ws');
-const http = require('http');
+const http      = require('http');
+const webpush   = require('web-push');
 
 // ── Configurações ──────────────────────────────────────
 const PORT           = process.env.PORT || 3001;
@@ -25,6 +26,33 @@ const MAX_PAYLOAD    = 20 * 1024 * 1024;          // 20 MB
 const HEARTBEAT_MS   = 30_000;                    // 30s ping/pong
 const RATE_LIMIT_MAX = 60;                        // max mensagens por janela
 const RATE_LIMIT_WIN = 10_000;                    // janela de 10 segundos
+
+// ── Helpers ────────────────────────────────────────────
+function log(...args) {
+  console.log(`[${new Date().toISOString()}]`, ...args);
+}
+
+function isValidId(id) {
+  // Hash hexadecimal entre 8 e 128 chars
+  return typeof id === 'string' && /^[a-f0-9]{8,128}$/i.test(id);
+}
+
+// ── VAPID (Web Push) ───────────────────────────────────
+// Gere suas chaves UMA vez com: npx web-push generate-vapid-keys
+// Depois configure no Render: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL
+const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_EMAIL   = process.env.VAPID_EMAIL       || 'mailto:admin@nexo.app';
+
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
+  log('[VAPID] configurado ✓');
+} else {
+  log('[VAPID] ⚠ Chaves não configuradas — push desabilitado');
+}
+
+// pushSubs: hashId → PushSubscription object
+const pushSubs = new Map();
 
 // Tipos efêmeros — não ficam na fila offline
 const EPHEMERAL = new Set([
@@ -50,16 +78,6 @@ const clients  = new Map(); // peerId -> ws
 const queue    = new Map(); // peerId -> [packets]
 const startedAt = Date.now();
 
-// ── Helpers ────────────────────────────────────────────
-function log(...args) {
-  console.log(`[${new Date().toISOString()}]`, ...args);
-}
-
-function isValidId(id) {
-  // Hash hexadecimal entre 8 e 128 chars
-  return typeof id === 'string' && /^[a-f0-9]{8,128}$/i.test(id);
-}
-
 // Rate limiter simples por peerId
 const rateLimitMap = new Map(); // peerId -> { count, resetAt }
 function checkRateLimit(id) {
@@ -81,9 +99,71 @@ setInterval(() => {
   }
 }, 60_000);
 
+// ── Função de disparo de push ──────────────────────────
+async function sendPush(toId, payload) {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+  const sub = pushSubs.get(toId);
+  if (!sub) return;
+  try {
+    await webpush.sendNotification(sub, JSON.stringify(payload));
+  } catch (err) {
+    // 410 Gone = subscription expirou/foi removida pelo usuário
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      pushSubs.delete(toId);
+      log(`[PUSH] subscription removida para ${toId.slice(0,8)} (${err.statusCode})`);
+    } else {
+      log(`[PUSH] erro para ${toId.slice(0,8)}: ${err.message}`);
+    }
+  }
+}
+
 // ── HTTP Server ────────────────────────────────────────
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // ── GET /vapid-public-key — cliente busca a chave pública ──
+  if (req.method === 'GET' && req.url === '/vapid-public-key') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ key: VAPID_PUBLIC || null }));
+    return;
+  }
+
+  // ── POST /push-subscribe — registra subscription ──────────
+  if (req.method === 'POST' && req.url === '/push-subscribe') {
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 8192) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const { hashId, subscription } = JSON.parse(body);
+        if (!isValidId(hashId) || !subscription?.endpoint) {
+          res.writeHead(400); res.end('invalid'); return;
+        }
+        pushSubs.set(hashId, subscription);
+        log(`[PUSH] subscribed: ${hashId.slice(0,8)}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch { res.writeHead(400); res.end('bad json'); }
+    });
+    return;
+  }
+
+  // ── DELETE /push-subscribe — remove subscription ──────────
+  if (req.method === 'DELETE' && req.url === '/push-subscribe') {
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', () => {
+      try {
+        const { hashId } = JSON.parse(body);
+        if (isValidId(hashId)) { pushSubs.delete(hashId); log(`[PUSH] unsubscribed: ${hashId.slice(0,8)}`); }
+        res.writeHead(200); res.end('ok');
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
 
   if (req.url === '/health') {
     const totalQueued = [...queue.values()].reduce((s, q) => s + q.length, 0);
@@ -93,6 +173,7 @@ const server = http.createServer((req, res) => {
       clients: clients.size,
       queued_users: queue.size,
       queued_msgs: totalQueued,
+      push_subs: pushSubs.size,
       uptime_s: Math.floor((Date.now() - startedAt) / 1000),
       ts: Date.now()
     }));
@@ -185,6 +266,44 @@ wss.on('connection', (ws, req) => {
             if (pkt.type === 'CALL_OFFER') pkt._ttl = 60_000; // chamadas perdidas: 60s
             q.push(pkt);
             if (q.length > MAX_QUEUE) q.shift(); // descarta mais antigo
+          }
+          // ── Dispara Web Push se houver subscription ────
+          const fromName = pkt._senderName || myId.slice(0, 8);
+          if (pkt.type === 'MSG' || pkt.type === 'AUDIO' || pkt.type === 'IMAGE') {
+            const body = pkt.type === 'MSG' ? 'enviou uma mensagem' :
+                         pkt.type === 'AUDIO' ? 'enviou um áudio 🎙' : 'enviou uma imagem 🖼';
+            sendPush(to, {
+              type: 'message',
+              title: fromName,
+              body,
+              from: myId,
+              tag: 'msg-' + myId   // agrupa notificações do mesmo remetente
+            });
+          } else if (pkt.type === 'CALL_OFFER') {
+            sendPush(to, {
+              type: 'call',
+              title: fromName + ' está chamando',
+              body: pkt._callType === 'video' ? '📹 Chamada de vídeo' : '📞 Chamada de voz',
+              from: myId,
+              tag: 'call-' + myId,
+              requireInteraction: true
+            });
+          } else if (pkt.type === 'GROUP_MSG') {
+            sendPush(to, {
+              type: 'group_message',
+              title: pkt._groupName || 'Grupo',
+              body: (fromName) + ': mensagem no grupo',
+              from: myId,
+              tag: 'grp-' + (pkt.groupId || myId)
+            });
+          } else if (pkt.type === 'INVITE') {
+            sendPush(to, {
+              type: 'invite',
+              title: 'Novo convite no Nexo',
+              body: fromName + ' quer se conectar',
+              from: myId,
+              tag: 'invite-' + myId
+            });
           }
           // ACK de "em fila"
           if (ws.readyState === WebSocket.OPEN) {
