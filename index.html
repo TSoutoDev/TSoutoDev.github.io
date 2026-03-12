@@ -22,10 +22,61 @@ self.addEventListener('activate', e => e.waitUntil(
     .then(() => self.clients.claim())
 ));
 self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+
+/* ── Web Push ── */
+self.addEventListener('push', e => {
+  if (!e.data) return;
+  let d = {};
+  try { d = e.data.json(); } catch { d = { title: 'Nexo', body: e.data.text() }; }
+  const opts = {
+    body:    d.body  || 'Nova mensagem',
+    icon:    '/icon-192.png',
+    badge:   '/icon-192.png',
+    tag:     d.tag   || 'nexo-msg',
+    data:    d,
+    vibrate: d.type === 'call' ? [200,100,200,100,400] : [200,100,200],
+    requireInteraction: !!d.requireInteraction,
+    silent: false
+  };
+  e.waitUntil(self.registration.showNotification(d.title || 'Nexo', opts));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const d = e.notification.data || {};
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url && c.visibilityState);
+      if (existing) {
+        existing.focus();
+        existing.postMessage({ type: 'NOTIF_TAP', from: d.from, notifType: d.type });
+      } else {
+        clients.openWindow('/').then(w => {
+          if (w) w.postMessage({ type: 'NOTIF_TAP', from: d.from, notifType: d.type });
+        });
+      }
+    })
+  );
+});
 `;
     const swBlob = new Blob([swCode], {type:'application/javascript'});
     const swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, {scope: './'}).catch(()=>{});
+    navigator.serviceWorker.register(swUrl, {scope: './'})
+      .then(reg => { window._swReg = reg; })
+      .catch(()=>{});
+    // Recebe mensagem do SW quando usuário toca na notificação
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'NOTIF_TAP') {
+        const { from, notifType } = e.data;
+        if (notifType === 'call' && from) {
+          showToast('Conectando chamada...');
+        } else if (from && S.contacts[from]) {
+          openChat(from);
+        } else if (from && S.groups[from]) {
+          openGroupChat(from);
+        }
+      }
+    });
   }
 
   // Generate icon and create manifest
@@ -661,15 +712,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         </div>
       </div>
     </div>
+    <div class="section-header">Notificacoes</div>
+    <div id="notif-row" class="setting-row" onclick="togglePushNotifications()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="setting-label">Notificacoes push</span>
+      <span id="notif-status" class="setting-value">›</span>
+    </div>
     <div class="section-header">Dados</div>
     <div class="setting-row" onclick="exportBackup()">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span class="setting-label">Exportar backup</span><span class="setting-value">›</span>
-    </div>
-    <div class="setting-row" onclick="requestNotifPermission()">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span class="setting-label">Ativar notificacoes</span>
-      <span class="setting-value">›</span>
     </div>
     <div class="section-header" style="color:var(--danger);">Perigo</div>
     <button class="btn-danger" onclick="confirmDeleteAccount()">Apagar conta e todos os dados</button>
@@ -1575,7 +1627,106 @@ function initFCM() {
   });
 }
 
-function scheduleReconnect() {
+// ── WEB PUSH (PWA nativa — substitui FCM no browser) ───
+async function initWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('[PUSH] PushManager não suportado neste browser');
+    return;
+  }
+  if (!S.id?.serverUrl) return;
+
+  const serverBase = S.id.serverUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '');
+
+  // Busca chave pública VAPID do servidor
+  let vapidKey;
+  try {
+    const r = await fetch(serverBase + '/vapid-public-key');
+    const j = await r.json();
+    vapidKey = j.key;
+  } catch { console.log('[PUSH] servidor sem VAPID'); return; }
+  if (!vapidKey) { console.log('[PUSH] VAPID não configurado no servidor'); return; }
+
+  // Verifica permissão atual
+  const perm = Notification.permission;
+  if (perm === 'denied') { console.log('[PUSH] permissão negada'); return; }
+
+  // Pede permissão se ainda não concedida
+  if (perm !== 'granted') {
+    const result = await Notification.requestPermission();
+    if (result !== 'granted') { console.log('[PUSH] usuário recusou'); return; }
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // Verifica se já tem subscription válida
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey)
+      });
+    }
+    // Envia subscription ao servidor
+    await fetch(serverBase + '/push-subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hashId: S.id.hashId, subscription: sub.toJSON() })
+    });
+    S._pushSub = sub;
+    console.log('[PUSH] subscrito com sucesso ✓');
+  } catch (err) {
+    console.log('[PUSH] erro ao subscrever:', err.message);
+  }
+}
+
+async function togglePushNotifications() {
+  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
+  if (perm === 'unsupported') { showToast('Notificações não suportadas'); return; }
+  if (S._pushSub) {
+    // Já ativo — desativar
+    await unsubscribeWebPush();
+    showToast('Notificações desativadas');
+  } else {
+    if (perm === 'denied') {
+      showToast('Permissão bloqueada — habilite nas configurações do Android');
+      return;
+    }
+    await initWebPush();
+    if (S._pushSub) showToast('Notificações ativadas ✓');
+    else showToast('Não foi possível ativar notificações');
+  }
+  updateNotifStatusUI();
+}
+
+function updateNotifStatusUI() {
+  const el = document.getElementById('notif-status');
+  if (!el) return;
+  if (!('Notification' in window)) { el.textContent = 'Não suportado'; return; }
+  const perm = Notification.permission;
+  if (perm === 'denied') { el.textContent = 'Bloqueado'; el.style.color = 'var(--danger)'; return; }
+  if (S._pushSub) { el.textContent = 'Ativo ✓'; el.style.color = 'var(--accent)'; }
+  else { el.textContent = 'Inativo'; el.style.color = 'var(--muted)'; }
+}
+  if (!S._pushSub) return;
+  try {
+    const serverBase = S.id.serverUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '');
+    await fetch(serverBase + '/push-subscribe', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hashId: S.id.hashId })
+    });
+    await S._pushSub.unsubscribe();
+    S._pushSub = null;
+    console.log('[PUSH] desinscrito');
+  } catch {}
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+}
   clearTimeout(S.wsReconnectTimer);
   // Don't reconnect if app is in background — wait for visibility
   if (document.hidden) return;
@@ -1588,6 +1739,10 @@ function scheduleReconnect() {
 
 function send(pkt) {
   if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+    // Injeta nome do remetente para o servidor usar nas notificações push
+    if (S.id?.name && pkt.type !== 'PING' && pkt.type !== 'REGISTER') {
+      pkt._senderName = S.id.name;
+    }
     S.ws.send(JSON.stringify(pkt));
     return true;
   }
@@ -1605,6 +1760,8 @@ function handlePacket(pkt) {
       for (const [hId, msgs] of Object.entries(S.convs)) {
         msgs.filter(m => m.from==='me' && m.status==='queued').forEach(m => retrySend(hId, m));
       }
+      // Inicia Web Push na primeira conexão
+      if (!S._pushInitialized) { S._pushInitialized = true; initWebPush(); }
       break;
 
     case 'INVITE': {
@@ -1902,6 +2059,7 @@ function SS(name, _fromPopState) {
   if (name==='settings') {
     const el = document.getElementById('server-url-input');
     if (el && S.id) el.value = S.id.serverUrl || '';
+    updateNotifStatusUI();
   }
   if (name==='add') {
     const prefill = window._addCardPrefill;
