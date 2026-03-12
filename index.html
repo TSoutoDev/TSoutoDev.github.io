@@ -177,7 +177,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .chat-header-name{font-size:15px;font-weight:700;}
 .chat-header-status{font-size:11px;color:var(--muted);margin-top:1px;}
 .chat-header-status.connected{color:var(--accent);}
-.messages-area{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:2px;}
+.messages-area{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-height:0;}
+.messages-spacer{flex:1;min-height:0;}
 .messages-area::-webkit-scrollbar{display:none;}
 .date-sep{text-align:center;margin:10px 0;}
 .date-sep span{font-size:11px;color:var(--muted);background:var(--bg2);padding:3px 11px;border-radius:9px;}
@@ -480,7 +481,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button id="btn-video-call" class="icon-btn" onclick="startCall('video')" title="Chamada de video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
     <button class="icon-btn" onclick="openChatMenu()"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
   </div>
-  <div id="messages-area" class="messages-area"></div>
+  <div id="messages-area" class="messages-area"><div class="messages-spacer"></div></div>
   <div id="typing-indicator" class="typing-indicator">
     <div class="typing-dots"><span></span><span></span><span></span></div>
     <span style="font-size:12px;color:var(--muted);">digitando...</span>
@@ -586,11 +587,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <span id="hash-chevron" style="color:var(--muted);transition:transform .25s;display:inline-block;">›</span>
       </div>
       <!-- Painel sanfona do hash -->
-      <div id="hash-panel" style="max-height:0;overflow:hidden;transition:max-height .3s ease;background:var(--bg3);border-left:1px solid var(--border);border-right:1px solid var(--border);">
+      <div id="hash-panel" style="max-height:0;overflow:hidden;transition:max-height .35s ease;background:var(--bg3);border-left:1px solid var(--border);border-right:1px solid var(--border);">
         <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-          <div id="profile-hash" style="font-family:monospace;font-size:12px;color:var(--accent);word-break:break-all;line-height:1.6;background:var(--bg2);border-radius:8px;padding:10px 12px;letter-spacing:0.5px;">—</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6;">Seu <strong style="color:var(--text)">Hash</strong> é seu endereço no Nexo. Compartilhe com quem você quer se conectar — sem revelar seu número de telefone.</div>
+          <div id="profile-hash" style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--accent);word-break:break-all;line-height:1.7;background:var(--bg2);border-radius:8px;padding:10px 12px;letter-spacing:0.4px;border:1px solid var(--border);">—</div>
           <button onclick="copyMyHash()" style="background:var(--accent);border:none;border-radius:9px;padding:10px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copiar Hash
           </button>
         </div>
@@ -603,9 +605,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       </div>
 
       <!-- 3. PIN -->
-      <div class="setting-row" onclick="setupPin()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);">
+      <div id="pin-row-setup" class="setting-row" onclick="setupPin()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <span class="setting-label">Configurar PIN</span><span class="setting-value">›</span>
+      </div>
+      <!-- Aparece só quando PIN está ativo -->
+      <div id="pin-row-remove" class="setting-row" onclick="removePinConfirm()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);display:none;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span class="setting-label" style="color:var(--danger);">Remover PIN</span><span class="setting-value" style="color:var(--danger);">›</span>
       </div>
     </div>
 
@@ -1640,10 +1647,13 @@ function handlePacket(pkt) {
       } else {
         try { extra = JSON.parse(plain); content = ''; } catch { return; }
       }
+      // Detecta contact_card pelo conteúdo (começa com "📇 Contato compartilhado")
+      const isCard = pkt.type === 'MSG' && content.startsWith('📇 Contato compartilhado');
       const msg = {
         id: pkt.id, from, content,
         ...(pkt.type==='AUDIO' ? { audioB64:extra.b64, audioMime:extra.mime, duration:extra.dur, type:'audio' } : {}),
         ...(pkt.type==='IMAGE' ? { imgB64:extra.b64, imgMime:extra.mime, type:'image' } : {}),
+        ...(isCard ? { type:'contact_card' } : {}),
         ts: pkt.ts, status:'received'
       };
       if (!S.convs[from]) S.convs[from]=[];
@@ -2072,7 +2082,7 @@ function renderMessages(hId) {
   const area=document.getElementById('messages-area');
   const msgs=S.convs[hId]||[];
   const atBot=area.scrollHeight-area.scrollTop-area.clientHeight<80;
-  area.innerHTML=msgs.map((m,i)=>{
+  area.innerHTML='<div class="messages-spacer"></div>'+msgs.map((m,i)=>{
     const isMe=m.from==='me';
     const prev=msgs[i-1];
     const showDate=!prev||new Date(m.ts).toDateString()!==new Date(prev.ts).toDateString();
@@ -2325,7 +2335,7 @@ function stopCurrentAudio(fromEnd) {
   // Zera refs PRIMEIRO para bloquear qualquer frame pendente
   _currentAudio = null;
   _currentAudioMsgId = null;
-  audio.onended = null; audio.onplay = null; audio.onloadedmetadata = null;
+  audio.onended = null; audio.onplay = null; audio.onloadedmetadata = null; audio.ontimeupdate = null;
   audio.pause();
   _setAudioBtnState(id, false);
   // Reset visual
@@ -2406,13 +2416,21 @@ function playAudio(msgId) {
   _currentAudio = audio;
   _currentAudioMsgId = msgId;
   _setAudioBtnState(msgId, true);
-  // Reseta barra
   const bar = document.getElementById('apr-' + msgId);
   if (bar) bar.style.width = '0%';
-  // Assim que metadata carregar, dispara primeiro frame
-  audio.onloadedmetadata = () => _updateAudioProgress();
-  audio.onplay  = () => { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = requestAnimationFrame(_updateAudioProgress); };
+  // timeupdate: evento nativo que dispara a cada ~250ms durante reprodução
+  // Mais confiável que rAF em mobile/PWA
+  audio.ontimeupdate = () => {
+    if (_currentAudio !== audio) return; // já parou
+    _updateAudioProgress();
+  };
   audio.onended = () => stopCurrentAudio(true);
+  audio.onerror = () => stopCurrentAudio();
+  // Inicia animação via rAF também para smoothness
+  audio.onplay = () => {
+    cancelAnimationFrame(_audioAnimFrame);
+    _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
+  };
   audio.play().catch(() => stopCurrentAudio());
 }
 
@@ -2928,6 +2946,18 @@ function updateProfileUI() {
   document.getElementById('profile-name').textContent=S.id.name;
   const ph = document.getElementById('profile-hash');
   if (ph) ph.textContent=S.id.hashId;
+  // PIN rows
+  const hasPIN = !!localStorage.getItem('NX_PIN');
+  const setup = document.getElementById('pin-row-setup');
+  const rem   = document.getElementById('pin-row-remove');
+  if (setup) { setup.style.display = hasPIN ? 'none' : 'flex'; setup.style.borderRadius = hasPIN ? '' : '0 0 12px 12px'; }
+  if (rem)   { rem.style.display   = hasPIN ? 'flex' : 'none'; rem.style.borderRadius   = hasPIN ? '0 0 12px 12px' : ''; }
+}
+function removePinConfirm() {
+  nexoConfirm('Remover o PIN de segurança?', () => {
+    removePin();
+    updateProfileUI();
+  }, null, 'Remover', 'Cancelar', true);
 }
 function toggleHashPanel() {
   const panel = document.getElementById('hash-panel');
@@ -2951,12 +2981,14 @@ function cancelEditName() {
   document.getElementById('profile-name-edit').style.display='none';
 }
 function saveName() {
-  const n=document.getElementById('edit-name-input').value.trim();
-  if(!n) return;
-  S.id.name=n; saveId(S.id);
-  cancelEditName();
+  const n = document.getElementById('edit-name-input').value.trim();
+  if (!n) { showToast('Nome não pode ser vazio'); return; }
+  S.id.name = n; saveId(S.id);
+  // Fecha o campo ANTES de atualizar a UI (evita flicker)
+  document.getElementById('profile-name-edit').style.display = 'none';
+  document.getElementById('profile-name-row').style.display = 'flex';
   updateProfileUI(); updateMyAvatar();
-  showToast('Nome atualizado');
+  showToast('Nome atualizado ✓');
 }
 function compressProfilePhoto(file, cb) {
   if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
