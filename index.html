@@ -1450,14 +1450,30 @@ function handlePacket(pkt) {
       break;
 
     case 'INVITE': {
-      console.log('[INVITE] from:', from?.slice(0,8), 'existing contact:', S.contacts[from]?.status || 'none');
-      // Só ignora se já for contato ATIVO — se for pending_sent, aceita o convite
       const existingContact = S.contacts[from];
+
+      // Se já é ativo, ignora
       if (existingContact && existingContact.status === 'active') {
         console.log('[INVITE] ignorado — já é contato ativo');
         break;
       }
 
+      // Se eu já enviei convite para esta pessoa (pending_sent),
+      // aceitar automaticamente — conexão mútua!
+      if (existingContact && existingContact.status === 'pending_sent') {
+        console.log('[INVITE] conexão mútua detectada — aceitando automaticamente');
+        existingContact.status = 'active';
+        if (pkt.fromName) existingContact.name = pkt.fromName;
+        if (pkt.fromPhoto) existingContact.photo = pkt.fromPhoto;
+        saveDB();
+        send({type:'INVITE_ACCEPTED', to:from, fromName:S.id.name, fromPhoto:S.id.photo||null});
+        showToast(`${existingContact.name} conectado!`);
+        playNotifSound();
+        updateConvList();
+        break;
+      }
+
+      // Convite normal — adiciona à lista
       if (!S.invites.find(i=>i.fromHash===from)) {
         S.invites.push({ fromHash:from, fromName:pkt.fromName||from.slice(0,8), fromPhoto:pkt.fromPhoto||null, ts:Date.now() });
         saveDB(); updateInviteBanner();
@@ -1476,17 +1492,20 @@ function handlePacket(pkt) {
         S.contacts[from].status = 'active';
         if (pkt.fromPhoto) S.contacts[from].photo = pkt.fromPhoto;
         if (pkt.fromName)  S.contacts[from].name  = pkt.fromName;
-        saveDB();
-        showToast(`${S.contacts[from].name} aceitou`);
-        updateConvList();
-        (S.convs[from]||[]).filter(m=>m.from==='me'&&m.status==='queued').forEach(m=>retrySend(from,m));
       } else {
-        console.warn('[INVITE_ACCEPTED] contato NÃO encontrado para', from?.slice(0,8), '— criando agora');
-        // Cria o contato mesmo assim (caso raro onde aceitaram sem estar no mapa)
-        S.contacts[from] = { name: pkt.fromName||from.slice(0,8), photo: pkt.fromPhoto||null, secret: secret(S.id.hashId, from), addedAt: Date.now(), status: 'active' };
-        saveDB(); updateConvList();
-        showToast(`${pkt.fromName||'Contato'} aceitou`);
+        // Não tinha o contato (raro) — cria agora
+        S.contacts[from] = {
+          name: pkt.fromName||from.slice(0,8),
+          photo: pkt.fromPhoto||null,
+          secret: secret(S.id.hashId, from),
+          addedAt: Date.now(),
+          status: 'active'
+        };
       }
+      saveDB();
+      showToast(`${S.contacts[from].name} aceitou ✓`);
+      updateConvList();
+      (S.convs[from]||[]).filter(m=>m.from==='me'&&m.status==='queued').forEach(m=>retrySend(from,m));
       break;
 
     case 'INVITE_DECLINED':
