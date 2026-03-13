@@ -33,8 +33,12 @@ function log(...args) {
 }
 
 function isValidId(id) {
-  // Hash hexadecimal entre 8 e 128 chars
-  return typeof id === 'string' && /^[a-f0-9]{8,128}$/i.test(id);
+  if (typeof id !== 'string') return false;
+  // Formato com tracos: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (hash Nexo)
+  if (/^[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}$/i.test(id)) return true;
+  // Formato sem tracos (hex puro, legado)
+  if (/^[a-f0-9]{8,128}$/i.test(id)) return true;
+  return false;
 }
 
 // ── VAPID (Web Push) ───────────────────────────────────
