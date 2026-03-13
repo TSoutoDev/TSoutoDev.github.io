@@ -12,71 +12,20 @@
 <script>
 // ── SERVICE WORKER + PWA INSTALL ──────────────────────
 (function(){
-  // SW minimalista — só para habilitar o manifesto PWA (installability)
-  // NÃO faz cache para evitar servir versão velha
+  // Register service worker for PWA installability
   if ('serviceWorker' in navigator) {
     const swCode = `
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(
-  caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
-    .then(() => self.clients.claim())
-));
-self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
-
-/* ── Web Push ── */
-self.addEventListener('push', e => {
-  if (!e.data) return;
-  let d = {};
-  try { d = e.data.json(); } catch { d = { title: 'Nexo', body: e.data.text() }; }
-  const opts = {
-    body:    d.body  || 'Nova mensagem',
-    icon:    '/icon-192.png',
-    badge:   '/icon-192.png',
-    tag:     d.tag   || 'nexo-msg',
-    data:    d,
-    vibrate: d.type === 'call' ? [200,100,200,100,400] : [200,100,200],
-    requireInteraction: !!d.requireInteraction,
-    silent: false
-  };
-  e.waitUntil(self.registration.showNotification(d.title || 'Nexo', opts));
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const d = e.notification.data || {};
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const existing = list.find(c => c.url && c.visibilityState);
-      if (existing) {
-        existing.focus();
-        existing.postMessage({ type: 'NOTIF_TAP', from: d.from, notifType: d.type });
-      } else {
-        clients.openWindow('/').then(w => {
-          if (w) w.postMessage({ type: 'NOTIF_TAP', from: d.from, notifType: d.type });
-        });
-      }
-    })
-  );
+const CACHE = 'nexo-v1';
+self.addEventListener('install', e => { self.skipWaiting(); });
+self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
+self.addEventListener('fetch', e => {
+  // Network first for everything
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
 `;
     const swBlob = new Blob([swCode], {type:'application/javascript'});
     const swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, {scope: './'})
-      .then(reg => { window._swReg = reg; })
-      .catch(()=>{});
-    // Recebe mensagem do SW quando usuário toca na notificação
-    navigator.serviceWorker.addEventListener('message', e => {
-      if (e.data?.type === 'NOTIF_TAP') {
-        const { from, notifType } = e.data;
-        if (notifType === 'call' && from) {
-          showToast('Conectando chamada...');
-        } else if (from && S.contacts[from]) {
-          openChat(from);
-        } else if (from && S.groups[from]) {
-          openGroupChat(from);
-        }
-      }
-    });
+    navigator.serviceWorker.register(swUrl, {scope: './'}).catch(()=>{});
   }
 
   // Generate icon and create manifest
@@ -228,16 +177,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .chat-header-name{font-size:15px;font-weight:700;}
 .chat-header-status{font-size:11px;color:var(--muted);margin-top:1px;}
 .chat-header-status.connected{color:var(--accent);}
-.messages-area{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-height:0;}
-.messages-spacer{flex:1;min-height:0;}
+.messages-area{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:2px;}
 .messages-area::-webkit-scrollbar{display:none;}
 .date-sep{text-align:center;margin:10px 0;}
 .date-sep span{font-size:11px;color:var(--muted);background:var(--bg2);padding:3px 11px;border-radius:9px;}
-.msg-row{display:flex;margin:1px 0;position:relative;}
+.msg-row{display:flex;margin:1px 0;}
 .msg-row.me{justify-content:flex-end;}
 .msg-row.them{justify-content:flex-start;}
-.msg-row.selected .bubble{opacity:0.55;transform:scale(0.97);transition:all .15s;background:#3a1018 !important;border-color:#E85D6A60 !important;filter:grayscale(30%);}
-.msg-row.selected::before{content:'🗑';position:absolute;font-size:13px;top:6px;left:50%;transform:translateX(-50%);opacity:0.7;pointer-events:none;}
+.msg-row.selected .bubble{opacity:0.6;transform:scale(0.97);transition:all .15s;}
 .delete-bar{position:fixed;bottom:0;left:0;right:0;background:#1a0a0d;border-top:1.5px solid #E85D6A40;padding:14px 20px;padding-bottom:calc(var(--safe-bot) + 14px);display:none;align-items:center;justify-content:space-between;z-index:200;}
 .delete-bar.show{display:flex;}
 .bubble{max-width:78%;padding:9px 13px;border-radius:17px;word-break:break-word;line-height:1.5;font-size:15px;}
@@ -288,9 +235,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .emoji-grid button{background:none;border:none;font-size:22px;cursor:pointer;padding:4px;border-radius:8px;transition:background .1s;line-height:1;}
 .emoji-grid button:hover{background:var(--bg3);}
 .input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;padding-bottom:calc(var(--safe-bot) + 10px);background:var(--bg);border-top:1px solid var(--border);flex-shrink:0;}
-.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:21px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;resize:none;max-height:110px;min-height:42px;line-height:1.4;transition:border-color .2s;-webkit-appearance:none;overflow-y:auto;word-break:break-word;}
+.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:21px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;resize:none;max-height:110px;min-height:42px;line-height:1.4;transition:border-color .2s;-webkit-appearance:none;}
 .msg-input:focus{border-color:#3DD6AC35;}
-.msg-input:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none;}
+.msg-input::placeholder{color:var(--muted);}
 .bar-btn{width:42px;height:42px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,border-color .15s;touch-action:none;user-select:none;}
 .bar-btn svg{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .bar-btn:active,.bar-btn.active{background:#3DD6AC20;border-color:var(--accent);}
@@ -481,11 +428,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="screen-home" class="screen">
   <div class="topbar">
     <h1>Nexo</h1>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button class="icon-btn" onclick="startGroupCallFromHome()" title="Chamada em grupo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-      </button>
+    <div style="display:flex;gap:6px;">
       <button class="icon-btn" id="my-avatar-btn" onclick="SS('profile')" style="border-radius:50%;overflow:hidden;"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
+      <button class="icon-btn" onclick="SS('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
   </div>
   <div class="status-row">
@@ -532,28 +477,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button id="btn-video-call" class="icon-btn" onclick="startCall('video')" title="Chamada de video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
     <button class="icon-btn" onclick="openChatMenu()"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
   </div>
-  <div id="messages-area" class="messages-area"><div class="messages-spacer"></div></div>
+  <div id="messages-area" class="messages-area"></div>
   <div id="typing-indicator" class="typing-indicator">
     <div class="typing-dots"><span></span><span></span><span></span></div>
     <span style="font-size:12px;color:var(--muted);">digitando...</span>
   </div>
-  
+  <div style="position:relative;">
+    <div id="emoji-picker" class="emoji-picker hidden">
+      <input class="emoji-search" placeholder="Buscar emoji..." oninput="filterEmojis(this.value)" id="emoji-search-input">
+      <div class="emoji-cats" id="emoji-cats"></div>
+      <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+  </div>
   <div class="input-bar">
-    <button class="bar-btn" id="attach-btn" onclick="showAttachMenu()" title="Anexar arquivo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+    <button class="bar-btn emoji-btn" onclick="toggleEmojiPicker()" title="Emojis" style="font-size:20px;">😊</button>
+    <button class="bar-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Imagem">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
     </button>
-    <input type="file" id="file-input" accept="image/*,image/gif,.pdf,.doc,.docx,.txt,.zip" style="display:none" onchange="handleFileSelected(this)">
+    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleImageSelected(this)">
     <button class="bar-btn" id="voice-btn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Segurar para gravar voz">
       <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
-    <div id="msg-input" class="msg-input" contenteditable="true"
-      role="textbox" aria-multiline="true"
-      data-placeholder="Mensagem..."
-      onkeydown="handleMsgKey(event)"
-      oninput="autoResize(this);onTyping();handleMsgInput(event)"
-      onpaste="handleMsgPaste(event)"
-      enterkeyhint="send"
-      inputmode="text"></div>
+    <textarea id="msg-input" class="msg-input" rows="1" placeholder="Mensagem..." onkeydown="handleMsgKey(event)" oninput="autoResize(this);onTyping()"></textarea>
     <button id="send-btn" class="send-btn" onclick="sendTextMessage()" disabled>
       <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
@@ -602,71 +547,26 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button class="back-btn" onclick="SS('home')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
     <h1>Meu Perfil</h1>
   </div>
-  <div class="settings-content" style="padding-top:0;">
-
-    <!-- Hero: foto + nome -->
-    <div style="display:flex;flex-direction:column;align-items:center;padding:32px 20px 22px;background:linear-gradient(170deg,var(--bg2) 0%,transparent 100%);">
-      <div id="profile-avatar" class="avatar"
-        onclick="document.getElementById('profile-photo-input').click()"
-        style="width:110px;height:110px;font-size:40px;border-width:3px;cursor:pointer;box-shadow:0 6px 28px #000A;transition:transform .15s;"
-        onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform=''" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform=''"
-        title="Trocar foto"></div>
+  <div class="settings-content">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 0 8px;">
+      <div id="profile-avatar" class="avatar" onclick="document.getElementById('profile-photo-input').click()" style="width:72px;height:72px;font-size:26px;border-width:2px;cursor:pointer;position:relative;" title="Trocar foto">
+      </div>
       <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="changeProfilePhoto(this)">
-      <div style="margin-top:7px;font-size:11px;color:var(--muted);">Toque para alterar foto</div>
-
-      <!-- Nome: mostra texto + lápis; em edição mostra só o campo -->
-      <div id="profile-name-row" style="display:flex;align-items:center;gap:8px;margin-top:14px;">
-        <div id="profile-name" style="font-size:23px;font-weight:700;color:var(--text);">—</div>
-        <button onclick="startEditName()" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:4px;display:flex;align-items:center;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
-      </div>
-      <div id="profile-name-edit" style="display:none;align-items:center;gap:8px;margin-top:12px;">
-        <input id="edit-name-input" class="input-field" style="width:190px;text-align:center;font-size:16px;" type="text" placeholder="Seu apelido" maxlength="30"
-          onkeydown="if(event.key==='Enter')saveName()">
-        <button onclick="saveName()" style="background:var(--accent);border:none;border-radius:9px;padding:9px 16px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;">✓</button>
+      <span style="font-size:11px;color:var(--muted);">Toque na foto para alterar</span>
+      <div style="font-size:20px;font-weight:700;" id="profile-name">—</div>
+    </div>
+    <div class="hash-card">
+      <div class="hash-label">Meu Hash — compartilhe para receber contatos</div>
+      <div id="profile-hash" class="hash-value">—</div>
+      <button class="hash-copy-btn" onclick="copyMyHash()"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar Hash</button>
+    </div>
+    <div class="section-header">Editar nome</div>
+    <div class="setting-card">
+      <div style="display:flex;gap:8px;">
+        <input id="edit-name-input" class="input-field" style="flex:1;" type="text" placeholder="Seu apelido" maxlength="30">
+        <button style="background:var(--accent);border:none;border-radius:9px;padding:0 15px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;white-space:nowrap;" onclick="saveName()">Salvar</button>
       </div>
     </div>
-
-    <!-- 3 ações em cards -->
-    <div style="padding:0 16px;display:flex;flex-direction:column;gap:0;margin-top:4px;">
-
-      <!-- 1. Hash sanfona -->
-      <div class="setting-row" onclick="toggleHashPanel()" id="hash-row" style="border-radius:12px 12px 0 0;">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        <span class="setting-label">Meu Hash</span>
-        <span id="hash-chevron" style="color:var(--muted);transition:transform .25s;display:inline-block;">›</span>
-      </div>
-      <!-- Painel sanfona do hash -->
-      <div id="hash-panel" style="max-height:0;overflow:hidden;transition:max-height .35s ease;background:var(--bg3);border-left:1px solid var(--border);border-right:1px solid var(--border);">
-        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-          <div style="font-size:12px;color:var(--muted);line-height:1.6;">Seu <strong style="color:var(--text)">Hash</strong> é seu endereço no Nexo. Compartilhe com quem você quer se conectar — sem revelar seu número de telefone.</div>
-          <div id="profile-hash" style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--accent);word-break:break-all;line-height:1.7;background:var(--bg2);border-radius:8px;padding:10px 12px;letter-spacing:0.4px;border:1px solid var(--border);">—</div>
-          <button onclick="copyMyHash()" style="background:var(--accent);border:none;border-radius:9px;padding:10px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copiar Hash
-          </button>
-        </div>
-      </div>
-
-      <!-- 2. Configurações -->
-      <div class="setting-row" onclick="SS('settings')" style="border-top:1px solid var(--border);">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span class="setting-label">Configurações</span><span class="setting-value">›</span>
-      </div>
-
-      <!-- 3. PIN -->
-      <div id="pin-row-setup" class="setting-row" onclick="setupPin()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <span class="setting-label">Configurar PIN</span><span class="setting-value">›</span>
-      </div>
-      <!-- Aparece só quando PIN está ativo -->
-      <div id="pin-row-remove" class="setting-row" onclick="removePinConfirm()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);display:none;">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <span class="setting-label" style="color:var(--danger);">Remover PIN</span><span class="setting-value" style="color:var(--danger);">›</span>
-      </div>
-    </div>
-
   </div>
 </div>
 
@@ -712,16 +612,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         </div>
       </div>
     </div>
-    <div class="section-header">Notificacoes</div>
-    <div id="notif-row" class="setting-row" onclick="togglePushNotifications()">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span class="setting-label">Notificacoes push</span>
-      <span id="notif-status" class="setting-value">›</span>
-    </div>
     <div class="section-header">Dados</div>
     <div class="setting-row" onclick="exportBackup()">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span class="setting-label">Exportar backup</span><span class="setting-value">›</span>
+    </div>
+    <div class="section-header">Seguranca do app</div>
+    <div class="setting-card" style="display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:13px;color:var(--muted);">Proteja o Nexo com PIN de 4 digitos. O app tambem pede autenticacao ao voltar do background.</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="setupPin()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:9px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;">Configurar PIN</button>
+        <button onclick="removePin()" style="flex:1;padding:10px;background:transparent;border:1.5px solid var(--border);border-radius:9px;font-weight:600;color:var(--muted);cursor:pointer;font-size:13px;">Remover PIN</button>
+      </div>
+    </div>
+    <div class="setting-row" onclick="requestNotifPermission()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="setting-label">Ativar notificacoes</span>
+      <span class="setting-value">›</span>
     </div>
     <div class="section-header" style="color:var(--danger);">Perigo</div>
     <button class="btn-danger" onclick="confirmDeleteAccount()">Apagar conta e todos os dados</button>
@@ -731,7 +638,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 <!-- DELETE BAR -->
 <div id="delete-bar" class="delete-bar">
-  <span id="delete-bar-count" style="color:var(--text);font-size:14px;font-weight:600;">0 selecionadas</span>
+  <span id="delete-bar-label" style="color:var(--muted);font-size:14px;">1 mensagem selecionada</span>
   <div style="display:flex;gap:10px;">
     <button onclick="cancelDeleteMsg()" style="background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:8px 16px;color:var(--text);font-size:14px;cursor:pointer;">Cancelar</button>
     <button onclick="confirmDeleteMsg()" style="background:#E85D6A;border:none;border-radius:9px;padding:8px 16px;color:white;font-size:14px;font-weight:700;cursor:pointer;">🗑 Apagar</button>
@@ -802,8 +709,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <span id="gc-status" style="color:var(--accent);font-size:12px;font-weight:600;">Conectando...</span>
   </div>
 
-  <!-- GRID 6 SLOTS — 2×3 (até 6 participantes) -->
-  <div id="gc-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:3px;width:100%;padding-top:56px;padding-bottom:88px;">
+  <!-- FIXED 4-SLOT GRID — always 2×2 -->
+  <div id="gc-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;width:100%;padding-top:56px;padding-bottom:88px;">
     <!-- Slot 0 — local (você) -->
     <div id="gc-slot-0" class="gc-slot" data-label="Você">
       <video id="gc-slot-0-vid" autoplay playsinline muted style="display:none;width:100%;height:100%;object-fit:cover;"></video>
@@ -811,29 +718,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div class="gc-slot-label">Você</div>
     </div>
     <!-- Slot 1 -->
-    <div id="gc-slot-1" class="gc-slot gc-slot-empty" onclick="gcSlotTap(1)">
+    <div id="gc-slot-1" class="gc-slot gc-slot-empty">
       <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
     </div>
     <!-- Slot 2 -->
-    <div id="gc-slot-2" class="gc-slot gc-slot-empty" onclick="gcSlotTap(2)">
+    <div id="gc-slot-2" class="gc-slot gc-slot-empty">
       <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
     </div>
     <!-- Slot 3 -->
-    <div id="gc-slot-3" class="gc-slot gc-slot-empty" onclick="gcSlotTap(3)">
+    <div id="gc-slot-3" class="gc-slot gc-slot-empty">
       <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
-    </div>
-    <!-- Slot 4 -->
-    <div id="gc-slot-4" class="gc-slot gc-slot-empty" onclick="gcSlotTap(4)">
-      <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
-    </div>
-    <!-- Slot 5 -->
-    <div id="gc-slot-5" class="gc-slot gc-slot-empty" onclick="gcSlotTap(5)">
-      <div class="gc-av-circle gc-empty-circle">+</div>
-      <div class="gc-slot-label" style="color:var(--muted);">Toque p/ convidar</div>
+      <div class="gc-slot-label" style="color:var(--muted);">Aguardando...</div>
     </div>
   </div>
 
@@ -900,15 +797,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div id="gi-photo" style="width:80px;height:80px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:32px;background-size:cover;background-position:center;"></div>
       <div id="gi-name" style="font-size:20px;font-weight:700;color:var(--text);"></div>
       <div id="gi-count" style="font-size:13px;color:var(--muted);"></div>
-      <div id="gi-role-badge" style="display:none;font-size:11px;font-weight:700;background:#3DD6AC20;color:var(--accent);border:1px solid #3DD6AC40;border-radius:20px;padding:3px 12px;">👑 Administrador</div>
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Membros</div>
     <div id="gi-members" style="display:flex;flex-direction:column;gap:4px;"></div>
-    <div id="gi-admin-actions" style="display:none;margin-top:4px;display:flex;flex-direction:column;gap:8px;">
-      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--accent);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Adicionar membro
-      </button>
+    <div style="margin-top:8px;">
+      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;">+ Adicionar membro</button>
     </div>
     <button onclick="leaveGroup()" style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--danger);border-radius:10px;color:var(--danger);font-weight:600;cursor:pointer;font-size:14px;margin-top:4px;">Sair do grupo</button>
   </div>
@@ -1060,7 +953,7 @@ function doCreateGroup() {
   const groupKey = rndHex(32);
   const members = [S.id.hashId, ..._newGroupSelected];
 
-  S.groups[groupId] = { name, photo:_newGroupPhoto, members, key:groupKey, createdAt:Date.now(), createdBy:S.id.hashId, admins:[S.id.hashId] };
+  S.groups[groupId] = { name, photo:_newGroupPhoto, members, key:groupKey, createdAt:Date.now(), createdBy:S.id.hashId };
   S.convs[groupId] = [];
   saveDB();
 
@@ -1105,7 +998,7 @@ function openGroupChat(gId) {
   document.getElementById('btn-video-call').style.display='none';
   renderMessages(gId);
   document.getElementById('typing-indicator').classList.remove('show');
-  _setMsgText('');
+  document.getElementById('msg-input').value='';
   document.getElementById('send-btn').disabled=true;
   SS('chat');
   updateConvList();
@@ -1130,17 +1023,9 @@ function sendGroupMsg(gId, content, type='text', extra={}) {
 }
 
 // ── Group info screen ──────────────────────────────────
-function isGroupAdmin(gId) {
-  const g = S.groups[gId]; if (!g) return false;
-  const admins = g.admins || [g.createdBy];
-  return admins.includes(S.id.hashId);
-}
-
 function openGroupInfo() {
   const gId = S.currentChat;
   const g = S.groups[gId]; if (!g) return;
-  const iAmAdmin = isGroupAdmin(gId);
-  const admins = g.admins || [g.createdBy];
 
   document.getElementById('gi-name').textContent = g.name;
   document.getElementById('gi-count').textContent = g.members.length + ' membros';
@@ -1148,116 +1033,30 @@ function openGroupInfo() {
   if (g.photo) { photo.style.backgroundImage=`url(${g.photo})`; photo.textContent=''; }
   else { photo.style.backgroundImage=''; photo.textContent='👥'; }
 
-  // Badge de admin
-  const badge = document.getElementById('gi-role-badge');
-  badge.style.display = iAmAdmin ? 'inline-block' : 'none';
-
-  // Botões de admin
-  const adminActions = document.getElementById('gi-admin-actions');
-  adminActions.style.display = iAmAdmin ? 'flex' : 'none';
-
-  document.getElementById('gi-members').innerHTML = g.members.map(m => {
-    const isMe = m === S.id.hashId;
-    const name = isMe ? 'Você' : (S.contacts[m]?.name || m.slice(0,8));
-    const memberPhoto = isMe ? (S.id.photo||null) : (S.contacts[m]?.photo||null);
-    const isAdmin = admins.includes(m);
-    const isCreator = m === g.createdBy;
-
-    // Botões de ação que admin vê nos outros membros
-    let adminBtns = '';
-    if (iAmAdmin && !isMe) {
-      if (!isAdmin) {
-        adminBtns += `<button onclick="promoteToAdmin('${gId}','${m}')" title="Tornar admin"
-          style="background:none;border:1px solid var(--accent);border-radius:6px;padding:4px 8px;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">👑 Admin</button>`;
-      } else if (isAdmin && !isCreator) {
-        // Criador pode remover admin de outros admins
-        const iAmCreator = S.id.hashId === g.createdBy;
-        if (iAmCreator) {
-          adminBtns += `<button onclick="demoteAdmin('${gId}','${m}')" title="Remover admin"
-            style="background:none;border:1px solid #F9B74F;border-radius:6px;padding:4px 8px;color:#F9B74F;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">⭐ Remover</button>`;
-        }
-      }
-      adminBtns += `<button onclick="removeMemberFromGroup('${gId}','${m}')" title="Remover"
-        style="background:none;border:1px solid var(--danger);border-radius:6px;padding:4px 8px;color:var(--danger);font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;">Remover</button>`;
-    }
-
+  document.getElementById('gi-members').innerHTML = g.members.map(m=>{
+    const isMe = m===S.id.hashId;
+    const name = isMe ? 'Você' : (S.contacts[m]?.name||m.slice(0,8));
+    const photo = isMe ? (S.id.photo||null) : (S.contacts[m]?.photo||null);
     return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${memberPhoto?'background-image:url('+memberPhoto+');background-size:cover;background-position:center;':''}">
-        ${memberPhoto ? '' : name[0].toUpperCase()}
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${photo?'background-image:url('+photo+');background-size:cover;background-position:center;':''}">
+        ${photo?'':name[0].toUpperCase()}
       </div>
-      <div style="flex:1;min-width:0;">
-        <div style="color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
-        <div style="font-size:11px;color:${isCreator?'var(--accent)':isAdmin?'#F9B74F':'var(--muted)'};">
-          ${isCreator ? '👑 Criador' : isAdmin ? '⭐ Admin' : 'Membro'}
-        </div>
+      <div style="flex:1;">
+        <div style="color:var(--text);font-weight:600;">${esc(name)}</div>
+        ${m===g.createdBy?'<div style="font-size:11px;color:var(--accent);">Criador</div>':''}
       </div>
-      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${adminBtns}</div>
     </div>`;
   }).join('');
 
+  document.getElementById('gi-add-btn').style.display = g.createdBy===S.id.hashId ? 'block' : 'none';
   SS('group-info');
-}
-
-function promoteToAdmin(gId, memberHash) {
-  const g = S.groups[gId]; if (!g) return;
-  if (!isGroupAdmin(gId)) { showToast('Sem permissão'); return; }
-  if (!g.admins) g.admins = [g.createdBy];
-  if (g.admins.includes(memberHash)) { showToast('Já é admin'); return; }
-  g.admins.push(memberHash);
-  saveDB();
-  const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
-  g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
-    send({ type:'GROUP_MEMBER_ADDED', to:m, groupId:gId,
-      newMemberHash: memberHash, newMemberName: name, action:'promote_admin',
-      admins: g.admins });
-  });
-  showToast(name + ' é admin agora!');
-  openGroupInfo();
-}
-
-function demoteAdmin(gId, memberHash) {
-  const g = S.groups[gId]; if (!g) return;
-  if (S.id.hashId !== g.createdBy) { showToast('Apenas o criador pode remover admins'); return; }
-  if (!g.admins) return;
-  const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
-  nexoConfirm('Remover privilégio de admin de ' + name + '?', () => {
-    g.admins = g.admins.filter(a => a !== memberHash);
-    saveDB();
-    g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
-      send({ type:'GROUP_MEMBER_ADDED', to:m, groupId:gId,
-        newMemberHash: memberHash, newMemberName: name, action:'demote_admin',
-        admins: g.admins });
-    });
-    showToast(name + ' não é mais admin');
-    openGroupInfo();
-  }, null, 'Remover', 'Cancelar', true);
-}
-
-function removeMemberFromGroup(gId, memberHash) {
-  const g = S.groups[gId]; if (!g) return;
-  if (!isGroupAdmin(gId)) { showToast('Sem permissão'); return; }
-  const name = S.contacts[memberHash]?.name || memberHash.slice(0,8);
-  nexoConfirm('Remover ' + name + ' do grupo?', () => {
-    // Notificar o removido
-    send({ type:'GROUP_MEMBER_LEFT', to:memberHash, groupId:gId, memberHash, kicked:true });
-    // Notificar demais
-    g.members.filter(m=>m!==S.id.hashId&&m!==memberHash).forEach(m=>{
-      send({ type:'GROUP_MEMBER_LEFT', to:m, groupId:gId, memberHash, memberName:name });
-    });
-    g.members = g.members.filter(m=>m!==memberHash);
-    if (g.admins) g.admins = g.admins.filter(a=>a!==memberHash);
-    saveDB();
-    showToast(name + ' removido do grupo');
-    openGroupInfo();
-  }, null, 'Remover', 'Cancelar', true);
 }
 
 function showAddMemberToGroup() {
   const gId = S.currentChat, g = S.groups[gId]; if (!g) return;
-  if (!isGroupAdmin(gId)) { showToast('Só admins podem adicionar membros'); return; }
   const available = Object.entries(S.contacts).filter(([hId,ct])=>ct.status==='active'&&!g.members.includes(hId));
   if (!available.length) { showToast('Todos os contatos já estão no grupo'); return; }
-  if (g.members.length >= 6) { showToast('Máximo 6 membros atingido'); return; }
+  if (g.members.length >= 4) { showToast('Máximo 4 membros atingido'); return; }
 
   const overlay = document.createElement('div');
   overlay.id = 'add-member-modal';
@@ -1282,11 +1081,9 @@ function addMemberToGroup(hId) {
   document.getElementById('add-member-modal')?.remove();
   const gId=S.currentChat, g=S.groups[gId]; if(!g) return;
   if (g.members.includes(hId)) { showToast('Já é membro'); return; }
-  if (g.members.length >= 6) { showToast('Máximo 6 membros atingido'); return; }
   g.members.push(hId); saveDB();
   send({ type:'GROUP_INVITE', to:hId, groupId:gId, groupName:g.name,
     groupPhoto:g.photo||null, groupKey:g.key, members:g.members,
-    admins: g.admins || [g.createdBy],
     memberNames:Object.fromEntries(g.members.map(m=>[m,m===S.id.hashId?S.id.name:(S.contacts[m]?.name||m.slice(0,8))])),
     fromName:S.id.name, ts:Date.now() });
   g.members.filter(m=>m!==S.id.hashId&&m!==hId).forEach(m=>{
@@ -1312,8 +1109,7 @@ function handleGroupPacket(pkt, from) {
     case 'GROUP_INVITE': {
       if (S.groups[pkt.groupId]) break;
       S.groups[pkt.groupId] = { name:pkt.groupName, photo:pkt.groupPhoto||null,
-        members:pkt.members, key:pkt.groupKey, createdAt:pkt.ts||Date.now(), createdBy:from,
-        admins: pkt.admins || [from] };
+        members:pkt.members, key:pkt.groupKey, createdAt:pkt.ts||Date.now(), createdBy:from };
       if (!S.convs[pkt.groupId]) S.convs[pkt.groupId]=[];
       saveDB(); updateConvList();
       showToast('Você entrou no grupo "'+pkt.groupName+'"');
@@ -1338,34 +1134,13 @@ function handleGroupPacket(pkt, from) {
     }
     case 'GROUP_MEMBER_ADDED': {
       const g=S.groups[pkt.groupId]; if(!g) break;
-      if (pkt.action === 'promote_admin') {
-        if (!g.admins) g.admins = [g.createdBy];
-        if (!g.admins.includes(pkt.newMemberHash)) g.admins.push(pkt.newMemberHash);
-        if (pkt.admins) g.admins = pkt.admins;
-        saveDB();
-        const name = pkt.newMemberHash===S.id.hashId ? 'Você é' : (S.contacts[pkt.newMemberHash]?.name||'Alguém')+' é';
-        showToast(name + ' admin agora!');
-      } else {
-        if (!g.members.includes(pkt.newMemberHash)) { g.members.push(pkt.newMemberHash); saveDB(); }
-        showToast(pkt.newMemberName+' entrou no grupo');
-      }
-      break;
+      if (!g.members.includes(pkt.newMemberHash)) { g.members.push(pkt.newMemberHash); saveDB(); }
+      showToast(pkt.newMemberName+' entrou no grupo'); break;
     }
     case 'GROUP_MEMBER_LEFT': {
       const g=S.groups[pkt.groupId]; if(!g) break;
-      if (pkt.memberHash === S.id.hashId) {
-        // Fui removido
-        delete S.groups[pkt.groupId]; delete S.convs[pkt.groupId];
-        saveDB(); updateConvList();
-        if (S.currentChat === pkt.groupId) SS('home');
-        showToast(pkt.kicked ? 'Você foi removido do grupo' : 'Você saiu do grupo');
-      } else {
-        g.members = g.members.filter(m=>m!==pkt.memberHash);
-        if (g.admins) g.admins = g.admins.filter(a=>a!==pkt.memberHash);
-        saveDB();
-        showToast((pkt.memberName || 'Um membro') + ' saiu do grupo');
-      }
-      break;
+      g.members=g.members.filter(m=>m!==pkt.memberHash); saveDB();
+      showToast('Um membro saiu do grupo'); break;
     }
   }
 }
@@ -1627,107 +1402,7 @@ function initFCM() {
   });
 }
 
-// ── WEB PUSH (PWA nativa — substitui FCM no browser) ───
-async function initWebPush() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.log('[PUSH] PushManager não suportado neste browser');
-    return;
-  }
-  if (!S.id?.serverUrl) return;
-
-  const serverBase = S.id.serverUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '');
-
-  // Busca chave pública VAPID do servidor
-  let vapidKey;
-  try {
-    const r = await fetch(serverBase + '/vapid-public-key');
-    const j = await r.json();
-    vapidKey = j.key;
-  } catch { console.log('[PUSH] servidor sem VAPID'); return; }
-  if (!vapidKey) { console.log('[PUSH] VAPID não configurado no servidor'); return; }
-
-  // Verifica permissão atual
-  const perm = Notification.permission;
-  if (perm === 'denied') { console.log('[PUSH] permissão negada'); return; }
-
-  // Pede permissão se ainda não concedida
-  if (perm !== 'granted') {
-    const result = await Notification.requestPermission();
-    if (result !== 'granted') { console.log('[PUSH] usuário recusou'); return; }
-  }
-
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    // Verifica se já tem subscription válida
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey)
-      });
-    }
-    // Envia subscription ao servidor
-    await fetch(serverBase + '/push-subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hashId: S.id.hashId, subscription: sub.toJSON() })
-    });
-    S._pushSub = sub;
-    console.log('[PUSH] subscrito com sucesso ✓');
-  } catch (err) {
-    console.log('[PUSH] erro ao subscrever:', err.message);
-  }
-}
-
-async function togglePushNotifications() {
-  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
-  if (perm === 'unsupported') { showToast('Notificações não suportadas'); return; }
-  if (S._pushSub) {
-    // Já ativo — desativar
-    await unsubscribeWebPush();
-    showToast('Notificações desativadas');
-  } else {
-    if (perm === 'denied') {
-      showToast('Permissão bloqueada — habilite nas configurações do Android');
-      return;
-    }
-    await initWebPush();
-    if (S._pushSub) showToast('Notificações ativadas ✓');
-    else showToast('Não foi possível ativar notificações');
-  }
-  updateNotifStatusUI();
-}
-
-function updateNotifStatusUI() {
-  const el = document.getElementById('notif-status');
-  if (!el) return;
-  if (!('Notification' in window)) { el.textContent = 'Não suportado'; return; }
-  const perm = Notification.permission;
-  if (perm === 'denied') { el.textContent = 'Bloqueado'; el.style.color = 'var(--danger)'; return; }
-  if (S._pushSub) { el.textContent = 'Ativo ✓'; el.style.color = 'var(--accent)'; }
-  else { el.textContent = 'Inativo'; el.style.color = 'var(--muted)'; }
-}
-async function unsubscribeWebPush() {
-  if (!S._pushSub) return;
-  try {
-    const serverBase = S.id.serverUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '');
-    await fetch(serverBase + '/push-subscribe', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hashId: S.id.hashId })
-    });
-    await S._pushSub.unsubscribe();
-    S._pushSub = null;
-    console.log('[PUSH] desinscrito');
-  } catch {}
-}
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(base64);
-  return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
-}
+function scheduleReconnect() {
   clearTimeout(S.wsReconnectTimer);
   // Don't reconnect if app is in background — wait for visibility
   if (document.hidden) return;
@@ -1740,10 +1415,6 @@ function urlBase64ToUint8Array(base64String) {
 
 function send(pkt) {
   if (S.ws && S.ws.readyState === WebSocket.OPEN) {
-    // Injeta nome do remetente para o servidor usar nas notificações push
-    if (S.id?.name && pkt.type !== 'PING' && pkt.type !== 'REGISTER') {
-      pkt._senderName = S.id.name;
-    }
     S.ws.send(JSON.stringify(pkt));
     return true;
   }
@@ -1761,8 +1432,6 @@ function handlePacket(pkt) {
       for (const [hId, msgs] of Object.entries(S.convs)) {
         msgs.filter(m => m.from==='me' && m.status==='queued').forEach(m => retrySend(hId, m));
       }
-      // Inicia Web Push na primeira conexão
-      if (!S._pushInitialized) { S._pushInitialized = true; initWebPush(); }
       break;
 
     case 'INVITE': {
@@ -1805,13 +1474,10 @@ function handlePacket(pkt) {
       } else {
         try { extra = JSON.parse(plain); content = ''; } catch { return; }
       }
-      // Detecta contact_card pelo conteúdo (começa com "📇 Contato compartilhado")
-      const isCard = pkt.type === 'MSG' && content.startsWith('📇 Contato compartilhado');
       const msg = {
         id: pkt.id, from, content,
         ...(pkt.type==='AUDIO' ? { audioB64:extra.b64, audioMime:extra.mime, duration:extra.dur, type:'audio' } : {}),
         ...(pkt.type==='IMAGE' ? { imgB64:extra.b64, imgMime:extra.mime, type:'image' } : {}),
-        ...(isCard ? { type:'contact_card' } : {}),
         ts: pkt.ts, status:'received'
       };
       if (!S.convs[from]) S.convs[from]=[];
@@ -2030,83 +1696,27 @@ function restoreAccount() {
 
 // ── NAVIGATION ─────────────────────────────────────────
 let curScreen = 'welcome';
-// Seleção múltipla de mensagens
-let _selMsgs = new Set();
-let _selHId  = null;
-let _selMode = false;
-let _longPressTimer = null;
-function _hPush(screen) { try { history.pushState({ screen }, '', '#' + screen); } catch(e) {} }
-function _hReplace(screen) { try { history.replaceState({ screen }, '', '#' + screen); } catch(e) {} }
-
-// Telas onde o botão voltar deve fechar o app (telas raiz)
-const _ROOT_SCREENS = new Set(['welcome','home','hash-reveal']);
-
-function SS(name, _fromPopState) {
+function SS(name) {
   const prev = document.getElementById('screen-'+curScreen);
   const next = document.getElementById('screen-'+name);
   if (!next) return;
   if (prev) { prev.classList.remove('active'); prev.classList.add('slide-left'); }
   setTimeout(()=>{ if(prev) prev.classList.remove('slide-left'); }, 280);
   next.classList.add('active'); curScreen = name;
-
-  if (!_fromPopState) {
-    if (_ROOT_SCREENS.has(name)) _hReplace(name);
-    else _hPush(name);
-  }
-
   if (name==='home')    updateHomeUI();
   if (name==='profile') updateProfileUI();
   if (name==='invites') renderInvites();
   if (name==='settings') {
     const el = document.getElementById('server-url-input');
     if (el && S.id) el.value = S.id.serverUrl || '';
-    updateNotifStatusUI();
   }
   if (name==='add') {
-    const prefill = window._addCardPrefill;
-    window._addCardPrefill = null;
-    if (prefill) {
-      document.getElementById('add-hash-input').value = prefill.hash;
-      document.getElementById('add-name-input').value = prefill.name;
-      document.getElementById('add-status').textContent = '';
-      validateAddForm();
-      showToast('Hash preenchido — toque em Enviar Convite');
-    } else {
-      document.getElementById('add-hash-input').value='';
-      document.getElementById('add-name-input').value='';
-      document.getElementById('add-status').textContent='';
-      document.getElementById('send-invite-btn').disabled=true;
-    }
+    document.getElementById('add-hash-input').value='';
+    document.getElementById('add-name-input').value='';
+    document.getElementById('add-status').textContent='';
+    document.getElementById('send-invite-btn').disabled=true;
   }
 }
-
-window.addEventListener('popstate', (e) => {
-  const targetScreen = e.state?.screen;
-  const modals = ['attach-menu','add-member-modal','share-contact-modal','share-hash-modal','home-gc-modal'];
-  let closedModal = false;
-  modals.forEach(id => { const el = document.getElementById(id); if (el) { el.remove(); closedModal = true; } });
-  if (_selMode) { cancelDeleteMsg(); closedModal = true; }
-  const ep = document.getElementById('emoji-picker');
-  if (ep && !ep.classList.contains('hidden')) { ep.classList.add('hidden'); closedModal = true; }
-  if (closedModal) { _hPush(curScreen); return; }
-
-  if (targetScreen && document.getElementById('screen-' + targetScreen)) {
-    // Navega para a tela do estado
-    SS(targetScreen, true);
-    // Se voltou para tela raiz, garante que há um estado "vazio" antes dela
-    // para que o próximo voltar saia do app
-    if (_ROOT_SCREENS.has(targetScreen)) {
-      // Não reempilha — deixa o history esvaziar naturalmente
-    }
-  } else {
-    // Sem estado ou tela inválida — volta para home se não estiver lá
-    if (!_ROOT_SCREENS.has(curScreen)) {
-      SS('home', true);
-      _hReplace('home');
-    }
-    // Se já está na raiz: não faz nada, o browser/Android vai minimizar/fechar
-  }
-});
 
 // ── HOME ───────────────────────────────────────────────
 function updateHomeUI() { updateConvList(); updateInviteBanner(); updateMyAvatar(); }
@@ -2170,20 +1780,15 @@ function updateConvList() {
     }
     const groupBadge = item.type==='group' ? `<span style="font-size:10px;background:var(--bg3);color:var(--accent);padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;">GRUPO</span>` : '';
     const onclick = item.type==='group' ? `openGroupChat('${item.id}')` : `openChat('${item.id}')`;
-    // Ícone de compartilhar hash do contato — só para contatos individuais
-    const shareBtn = item.type==='contact' ? `<button onclick="event.stopPropagation();shareContactHash('${item.id}')" title="Compartilhar contato" style="background:none;border:none;padding:6px;cursor:pointer;color:var(--muted);flex-shrink:0;display:flex;align-items:center;border-radius:8px;transition:background .1s;" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='none'">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-    </button>` : '';
     return `<div class="conv-item" onclick="${onclick}">
       <div class="avatar" style="${item.photo?'background-image:url('+item.photo+');background-size:cover;background-position:center;background-color:transparent':'background:'+av.bg};border-color:${av.bd}">${item.photo?'':(item.type==='group'?'👥':av.l)}</div>
       <div class="conv-info">
         <div class="conv-name">${esc(item.name)}${groupBadge}</div>
         <div class="conv-preview">${preview}</div>
       </div>
-      <div class="conv-meta" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+      <div class="conv-meta">
         ${item.last?`<div class="conv-time">${fmtTime(item.last.ts)}</div>`:''}
         ${item.unread>0?`<div class="unread-badge">${item.unread}</div>`:''}
-        ${shareBtn}
       </div>
     </div>`;
   }).join('');
@@ -2198,8 +1803,8 @@ function updateInviteBanner() {
 // ── CHAT ───────────────────────────────────────────────
 function openChat(hId) {
   S.currentChat=hId; S.unread[hId]=0;
-  // Show 1-to-1 call buttons only (no group call)
-  document.getElementById('btn-group-call').style.display='none';
+  // Show all call buttons in 1-to-1 chat
+  document.getElementById('btn-group-call').style.display='flex';
   document.getElementById('btn-audio-call').style.display='flex';
   document.getElementById('btn-video-call').style.display='flex';
   const c=S.contacts[hId];
@@ -2210,7 +1815,7 @@ function openChat(hId) {
   setChatStatus();
   renderMessages(hId);
   document.getElementById('typing-indicator').classList.remove('show');
-  _setMsgText('');
+  document.getElementById('msg-input').value='';
   document.getElementById('send-btn').disabled=true;
   SS('chat');
   // Send read receipts for unread messages AND mark locally as read
@@ -2241,7 +1846,7 @@ function renderMessages(hId) {
   const area=document.getElementById('messages-area');
   const msgs=S.convs[hId]||[];
   const atBot=area.scrollHeight-area.scrollTop-area.clientHeight<80;
-  area.innerHTML='<div class="messages-spacer"></div>'+msgs.map((m,i)=>{
+  area.innerHTML=msgs.map((m,i)=>{
     const isMe=m.from==='me';
     const prev=msgs[i-1];
     const showDate=!prev||new Date(m.ts).toDateString()!==new Date(prev.ts).toDateString();
@@ -2266,36 +1871,6 @@ function renderMessages(hId) {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
       </div>${meta}`;
-    } else if (m.type==='doc') {
-      const kb = m.docSize ? Math.round(m.docSize/1024)+'KB' : '';
-      const ext = (m.docName||'').split('.').pop().toUpperCase().slice(0,5)||'DOC';
-      inner=`<div onclick="downloadDoc('${m.id}')" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:4px 0;">
-        <div style="width:40px;height:40px;border-radius:9px;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--accent);flex-shrink:0;">${ext}</div>
-        <div style="min-width:0;">
-          <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${esc(m.docName||'arquivo')}</div>
-          <div style="font-size:11px;color:var(--muted);">${kb} · Toque para baixar</div>
-        </div>
-      </div>${meta}`;
-    } else if (m.type==='contact_card') {
-      const lines = (m.content||'').split('\n');
-      const name = (lines[1]||'').replace('Nome: ','');
-      const hash = (lines[2]||'').replace('Hash: ','');
-      // Escapa para uso seguro em atributos onclick
-      const safeHash = hash.replace(/'/g,"\\'");
-      const safeName = name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-      const cardBtns = isMe
-        ? `<button onclick="copyToClipboard('${safeHash}')" style="background:none;border:1px solid var(--accent);border-radius:7px;padding:5px 10px;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;width:100%;">📋 Copiar Hash</button>`
-        : `<div style="display:flex;gap:6px;">
-            <button onclick="addContactFromCard('${safeHash}','${safeName}')" style="flex:1;background:var(--accent);border:none;border-radius:7px;padding:6px 10px;color:#06100D;font-size:11px;font-weight:700;cursor:pointer;">➕ Adicionar</button>
-            <button onclick="copyToClipboard('${safeHash}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;">📋 Copiar</button>
-          </div>`;
-      inner=`<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#06100D;font-weight:800;font-size:14px;flex-shrink:0;">${(name||'?')[0].toUpperCase()}</div>
-          <div><div style="font-weight:700;font-size:14px;color:var(--text);">${esc(name)}</div><div style="font-size:10px;color:var(--muted);">📇 Contato compartilhado</div></div>
-        </div>
-        ${cardBtns}
-      </div>${meta}`;
     } else {
       inner=esc(m.content)+meta;
     }
@@ -2303,13 +1878,7 @@ function renderMessages(hId) {
     const isGroup = !!S.groups[hId];
     const senderLabel = (!isMe && isGroup) ? `<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px;">${esc(m.senderName||S.contacts[m.from]?.name||'')}</div>` : '';
     return `${showDate?`<div class="date-sep"><span>${fmtDate(m.ts)}</span></div>`:''}
-    <div class="msg-row ${isMe?'me':'them'}${_selMsgs.has(m.id)?' selected':''}" id="msgrow-${m.id}"
-      oncontextmenu="_enterSelect(event,'${hId}','${m.id}')"
-      ontouchstart="startLongPress(event,'${hId}','${m.id}')"
-      ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
-      onclick="msgTap(event,'${hId}','${m.id}')">
-      <div class="bubble">${senderLabel}${inner}</div>
-    </div>`;
+    <div class="msg-row ${isMe?'me':'them'}" id="msgrow-${m.id}" oncontextmenu="selectMsg(event,'${hId}','${m.id}')" ontouchstart="startLongPress(event,'${hId}','${m.id}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="bubble">${senderLabel}${inner}</div></div>`;
   }).join('');
   if(atBot||msgs.length<=10) scrollBottom();
 }
@@ -2342,149 +1911,49 @@ function downloadImg(msgId) {
   a.click();
 }
 
-function downloadDoc(msgId) {
-  const all = Object.values(S.convs).flat();
-  const m = all.find(x => x.id === msgId);
-  if (!m?.docB64) return;
-  const a = document.createElement('a');
-  a.href = `data:${m.docMime||'application/octet-stream'};base64,${m.docB64}`;
-  a.download = m.docName || `nexo-doc-${Date.now()}`;
-  a.click();
-}
-
-function copyToClipboard(text) {
-  navigator.clipboard?.writeText(text).then(() => showToast('Hash copiado!')).catch(() => {
-    const ta = document.createElement('textarea'); ta.value = text;
-    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); showToast('Hash copiado!');
-  });
-}
-
-// Abre tela de adicionar contato já preenchida com hash e nome do card — sem confirm, vai direto
-function addContactFromCard(hash, name) {
-  // Se já é contato ativo, apenas abre a conversa
-  if (S.contacts[hash] && S.contacts[hash].status === 'active') {
-    openChat(hash); return;
-  }
-  window._addCardPrefill = { hash, name };
-  SS('add');
-  // Foca no botão de enviar convite após a tela abrir
-  setTimeout(() => {
-    const btn = document.getElementById('send-invite-btn');
-    if (btn) btn.focus();
-  }, 280);
-}
-
-// ── COMPARTILHAR HASH DO CONTATO (da conv-list) ────────
-function shareContactHash(contactId) {
-  // Mostra picker para escolher PARA QUEM enviar o hash deste contato
-  const ct = S.contacts[contactId]; if (!ct) return;
-  const targets = Object.entries(S.contacts).filter(([id, c]) => c.status === 'active' && id !== contactId);
-  if (!targets.length) { showToast('Nenhum contato para receber o hash'); return; }
-
-  const overlay = document.createElement('div');
-  overlay.id = 'share-hash-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:3000;display:flex;align-items:flex-end;';
-  overlay.innerHTML = `
-    <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:70vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,16px);">
-      <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <div>
-          <div style="font-weight:700;font-size:15px;color:var(--text);">Compartilhar ${esc(ct.name)}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">Enviar o hash para um contato</div>
-        </div>
-        <button onclick="document.getElementById('share-hash-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
-      </div>
-      <div style="overflow-y:auto;flex:1;">
-        ${targets.map(([id, c]) => `
-          <div onclick="_doShareHash('${contactId}','${id}')" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);">
-            <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${c.photo?'background-image:url('+c.photo+');background-size:cover;background-position:center;':''}">
-              ${c.photo ? '' : (c.name||'?')[0].toUpperCase()}
-            </div>
-            <div style="color:var(--text);font-weight:600;">${esc(c.name)}</div>
-          </div>`).join('')}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-function _doShareHash(contactId, targetId) {
-  document.getElementById('share-hash-modal')?.remove();
-  const ct = S.contacts[contactId]; if (!ct) return;
-  const target = S.contacts[targetId]; if (!target) return;
-
-  const cardText = `📇 Contato compartilhado\nNome: ${ct.name}\nHash: ${contactId}`;
-  const id = genId(), ts = Date.now();
-  const e = enc(cardText, target.secret);
-  const msg = { id, from:'me', content: cardText, ts, status:'sending', type:'contact_card' };
-  pushMsg(targetId, msg);
-  // Se o chat deste contato estiver aberto, renderiza
-  if (S.currentChat === targetId) { renderMessages(targetId); scrollBottom(); }
-  const sent = send({ type:'MSG', to:targetId, id, enc:e, ts });
-  msg.status = 'queued';
-  if (sent) scheduleAckTimeout(targetId, id);
-  saveDB();
-  if (S.currentChat === targetId) renderMessages(targetId);
-  showToast('Hash de ' + ct.name + ' enviado para ' + target.name + '!');
-}
-
-// ── DELETE MESSAGE — seleção múltipla ─────────────────
+// ── DELETE MESSAGE ─────────────────────────────────────
+let _selectedMsg = null;
+let _longPressTimer = null;
 
 function startLongPress(e, hId, msgId) {
-  _longPressTimer = setTimeout(() => _enterSelect(e, hId, msgId), 480);
+  _longPressTimer = setTimeout(() => { selectMsg(e, hId, msgId); }, 500);
 }
 function cancelLongPress() { clearTimeout(_longPressTimer); }
 
-function _enterSelect(e, hId, msgId) {
+function selectMsg(e, hId, msgId) {
   e.preventDefault();
+  clearTimeout(_longPressTimer);
+  // Vibrate for feedback
   if (navigator.vibrate) navigator.vibrate(40);
-  _selMode = true;
-  _selHId  = hId;
-  _selMsgs.clear();
-  _selMsgs.add(msgId);
-  _updateDeleteBar();
-  _refreshSelHighlight();
-}
-
-function msgTap(e, hId, msgId) {
-  if (!_selMode) return;          // clique normal — ignora
-  e.stopPropagation();
-  if (_selMsgs.has(msgId)) { _selMsgs.delete(msgId); }
-  else                      { _selMsgs.add(msgId);    }
-  if (_selMsgs.size === 0) { cancelDeleteMsg(); return; }
-  _updateDeleteBar();
-  _refreshSelHighlight();
-}
-
-function _updateDeleteBar() {
-  const n = _selMsgs.size;
-  const el = document.getElementById('delete-bar-count');
-  if (el) el.textContent = n + (n === 1 ? ' mensagem' : ' mensagens');
-  document.getElementById('delete-bar').classList.toggle('show', n > 0);
-}
-
-function _refreshSelHighlight() {
-  document.querySelectorAll('.msg-row').forEach(r => {
-    r.classList.toggle('selected', _selMsgs.has(r.id.replace('msgrow-', '')));
-  });
+  _selectedMsg = { hId, msgId };
+  // Highlight row
+  document.querySelectorAll('.msg-row.selected').forEach(r=>r.classList.remove('selected'));
+  const row = document.getElementById('msgrow-'+msgId);
+  if (row) row.classList.add('selected');
+  document.getElementById('delete-bar').classList.add('show');
 }
 
 function cancelDeleteMsg() {
-  _selMode = false; _selMsgs.clear(); _selHId = null;
-  document.querySelectorAll('.msg-row.selected').forEach(r => r.classList.remove('selected'));
+  _selectedMsg = null;
+  document.querySelectorAll('.msg-row.selected').forEach(r=>r.classList.remove('selected'));
   document.getElementById('delete-bar').classList.remove('show');
 }
 
 function confirmDeleteMsg() {
-  const hId = _selHId; if (!hId || !_selMsgs.size) return;
-  if (S.convs[hId]) S.convs[hId] = S.convs[hId].filter(m => !_selMsgs.has(m.id));
-  saveDB(); cancelDeleteMsg(); renderMessages(hId);
+  if (!_selectedMsg) return;
+  const { hId, msgId } = _selectedMsg;
+  if (S.convs[hId]) {
+    S.convs[hId] = S.convs[hId].filter(m => m.id !== msgId);
+    saveDB();
+    renderMessages(hId);
+  }
+  cancelDeleteMsg();
 }
 
 let _currentAudio = null;
 let _currentAudioMsgId = null;
-let _audioInterval = null; // setInterval — driver principal de progresso
 
-const PLAY_ICON  = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+const PLAY_ICON = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 const PAUSE_ICON = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 
 function _setAudioBtnState(msgId, playing) {
@@ -2494,73 +1963,57 @@ function _setAudioBtnState(msgId, playing) {
   btn.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
 }
 
-function _stopAudioInterval() {
-  if (_audioInterval) { clearInterval(_audioInterval); _audioInterval = null; }
+function stopCurrentAudio() {
+  if (_currentAudio) {
+    if (_audioAnimFrame) { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = null; }
+    const id = _currentAudioMsgId;
+    _currentAudio.pause();
+    _currentAudio.currentTime = 0;
+    _currentAudio.onended = null;
+    _currentAudio.onplay = null;
+    _setAudioBtnState(id, false);
+    // Reset progress UI
+    const bar = document.getElementById('apr-' + id);
+    if (bar) bar.style.width = '0%';
+    const wv = document.getElementById('awv-' + id);
+    if (wv) wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
+    // Restore full duration in timer
+    const m = Object.values(S.convs).flat().find(x=>x.id===id);
+    const timer = document.getElementById('adt-' + id);
+    if (timer && m) { const dur=m.duration||0,mm=Math.floor(dur/60),ss=String(dur%60).padStart(2,'0'); timer.textContent=mm+':'+ss; }
+    _currentAudio = null;
+    _currentAudioMsgId = null;
+  }
 }
+
+let _audioAnimFrame = null;
 
 function _updateAudioProgress() {
+  if (!_currentAudio || !_currentAudioMsgId) return;
   const audio = _currentAudio;
-  const msgId = _currentAudioMsgId;
-  if (!audio || !msgId) return;
+  const dur = audio.duration || 0;
+  const cur = audio.currentTime || 0;
+  const pct = dur > 0 ? (cur / dur) * 100 : 0;
 
-  // duration pode ser Infinity no início em alguns codecs — fallback na duração salva
-  const savedDur = Object.values(S.convs).flat().find(x => x.id === msgId)?.duration || 0;
-  const dur = (isFinite(audio.duration) && audio.duration > 0) ? audio.duration : savedDur;
-  const cur = Math.min(audio.currentTime || 0, dur || 0);
-  const pct = dur > 0 ? cur / dur : 0;
+  const bar = document.getElementById('apr-' + _currentAudioMsgId);
+  if (bar) bar.style.width = pct + '%';
 
-  const bar = document.getElementById('apr-' + msgId);
-  if (bar) bar.style.width = (pct * 100).toFixed(1) + '%';
-
-  const timer = document.getElementById('adt-' + msgId);
+  // Time display: show elapsed
+  const timer = document.getElementById('adt-' + _currentAudioMsgId);
   if (timer) {
-    const rem = Math.max(0, (dur || 0) - cur);
-    timer.textContent = Math.floor(rem / 60) + ':' + String(Math.floor(rem % 60)).padStart(2, '0');
+    const mm = Math.floor(cur/60), ss = String(Math.floor(cur%60)).padStart(2,'0');
+    timer.textContent = mm + ':' + ss;
   }
 
-  const wv = document.getElementById('awv-' + msgId);
+  // Highlight bars
+  const wv = document.getElementById('awv-' + _currentAudioMsgId);
   if (wv) {
     const spans = wv.querySelectorAll('span');
-    const filled = Math.round(pct * spans.length);
-    spans.forEach((sp, i) => sp.classList.toggle('played', i < filled));
+    const count = spans.length;
+    spans.forEach((sp, i) => sp.classList.toggle('played', i < Math.floor(pct / 100 * count)));
   }
-}
 
-function stopCurrentAudio(fromEnd) {
-  if (!_currentAudio) return;
-  _stopAudioInterval();
-  const id    = _currentAudioMsgId;
-  const audio = _currentAudio;
-  _currentAudio = null;
-  _currentAudioMsgId = null;
-  audio.onended = null; audio.onplay = null; audio.onpause = null; audio.onerror = null;
-  audio.pause();
-  _setAudioBtnState(id, false);
-
-  const m      = Object.values(S.convs).flat().find(x => x.id === id);
-  const dur    = m?.duration || 0;
-  const durTxt = Math.floor(dur / 60) + ':' + String(Math.floor(dur % 60)).padStart(2, '0');
-  const bar    = document.getElementById('apr-' + id);
-  const wv     = document.getElementById('awv-' + id);
-  const timer  = document.getElementById('adt-' + id);
-
-  if (fromEnd) {
-    if (bar)   bar.style.width = '100%';
-    if (wv)    wv.querySelectorAll('span').forEach(sp => sp.classList.add('played'));
-    if (timer) timer.textContent = '0:00';
-    setTimeout(() => {
-      const b = document.getElementById('apr-' + id);
-      const w = document.getElementById('awv-' + id);
-      const t = document.getElementById('adt-' + id);
-      if (b) b.style.width = '0%';
-      if (w) w.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
-      if (t) t.textContent = durTxt;
-    }, 1200);
-  } else {
-    if (bar)   bar.style.width = '0%';
-    if (wv)    wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
-    if (timer) timer.textContent = durTxt;
-  }
+  if (!audio.paused) _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
 }
 
 function seekAudio(e, msgId) {
@@ -2568,294 +2021,50 @@ function seekAudio(e, msgId) {
   const wv = document.getElementById('awv-' + msgId);
   if (!wv) return;
   const rect = wv.getBoundingClientRect();
-  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  if (isFinite(_currentAudio.duration)) {
-    _currentAudio.currentTime = _currentAudio.duration * pct;
-    _updateAudioProgress(); // atualiza visual imediatamente após seek
-  }
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  _currentAudio.currentTime = _currentAudio.duration * pct;
 }
 
-function playAudio(msgId) {
+function playAudio(msgId, btn) {
   if (_currentAudioMsgId === msgId) { stopCurrentAudio(); return; }
   stopCurrentAudio();
-
-  const m = Object.values(S.convs).flat().find(x => x.id === msgId);
+  const all = Object.values(S.convs).flat();
+  const m = all.find(x => x.id === msgId);
   if (!m?.audioB64) return;
-
-  const audio = new Audio(`data:${m.audioMime || 'audio/webm'};base64,${m.audioB64}`);
-  _currentAudio      = audio;
+  const audio = new Audio(`data:${m.audioMime||'audio/webm'};base64,${m.audioB64}`);
+  _currentAudio = audio;
   _currentAudioMsgId = msgId;
   _setAudioBtnState(msgId, true);
-
-  const bar = document.getElementById('apr-' + msgId);
-  if (bar) bar.style.width = '0%';
-
-  // setInterval a 100ms: simples, sem depender de eventos do codec
-  // Arranca no onplay (quando o browser confirma que está tocando)
-  audio.onplay = () => {
-    _stopAudioInterval();
-    _audioInterval = setInterval(_updateAudioProgress, 100);
-  };
-  audio.onpause = () => _stopAudioInterval();
-  audio.onended = () => stopCurrentAudio(true);
-  audio.onerror = () => stopCurrentAudio();
-
-  audio.play().catch(() => stopCurrentAudio());
+  audio.play().catch(() => { stopCurrentAudio(); });
+  audio.onended = () => { stopCurrentAudio(); };
+  audio.onplay = () => { _audioAnimFrame = requestAnimationFrame(_updateAudioProgress); };
 }
 
-// ── COMPARTILHAR CONTATO ───────────────────────────────
-function showShareContactPicker() {
-  const hId = S.currentChat;
-  if (!hId || S.groups[hId]) { showToast('Só disponível em conversas individuais'); return; }
-  const contacts = Object.entries(S.contacts).filter(([id, ct]) => ct.status === 'active' && id !== hId);
-  // Também pode compartilhar o próprio hash
-  const options = [
-    { id: S.id.hashId, name: 'Você mesmo (' + S.id.name + ')', photo: S.id.photo, isSelf: true },
-    ...contacts.map(([id, ct]) => ({ id, name: ct.name, photo: ct.photo }))
-  ];
-  if (!options.length) { showToast('Nenhum contato para compartilhar'); return; }
-
-  const overlay = document.createElement('div');
-  overlay.id = 'share-contact-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:3000;display:flex;align-items:flex-end;';
-  overlay.innerHTML = `
-    <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:65vh;overflow-y:auto;padding-bottom:24px;">
-      <div style="padding:16px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);z-index:1;">
-        <span style="font-weight:700;font-size:15px;color:var(--text);">Compartilhar contato</span>
-        <button onclick="document.getElementById('share-contact-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1;">×</button>
-      </div>
-      ${options.map(o => `
-        <div onclick="sendContactCard('${o.id}','${esc(o.name)}')" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);active:background:var(--bg3);">
-          <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${o.photo?'background-image:url('+o.photo+');background-size:cover;background-position:center;':''}">
-            ${o.photo ? '' : (o.name||'?')[0].toUpperCase()}
-          </div>
-          <div>
-            <div style="color:var(--text);font-weight:600;font-size:14px;">${esc(o.name)}</div>
-            <div style="color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;">${o.id.slice(0,19)}...</div>
-          </div>
-        </div>`).join('')}
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-function sendContactCard(contactHash, contactName) {
-  document.getElementById('share-contact-modal')?.remove();
-  const hId = S.currentChat, c = S.contacts[hId]; if (!c) return;
-  // Envia como mensagem de texto especial formatada
-  const cardText = `📇 Contato compartilhado\nNome: ${contactName}\nHash: ${contactHash}`;
-  const id = genId(), ts = Date.now();
-  const e = enc(cardText, c.secret);
-  const msg = { id, from:'me', content: cardText, ts, status:'sending', type:'contact_card' };
-  pushMsg(hId, msg);
-  renderMessages(hId); scrollBottom();
-  const sent = send({ type:'MSG', to:hId, id, enc:e, ts });
-  msg.status = 'queued';
-  if (sent) scheduleAckTimeout(hId, id);
-  saveDB(); renderMessages(hId);
-}
-
-// ── CHAMADA EM GRUPO DA TELA HOME ──────────────────────
-function startGroupCallFromHome() {
-  // Mostra seletor de contatos para montar a chamada
-  const contacts = Object.entries(S.contacts).filter(([,ct]) => ct.status === 'active');
-  if (contacts.length < 1) { showToast('Você precisa de ao menos 1 contato ativo'); return; }
-
-  const selected = new Set();
-  const overlay = document.createElement('div');
-  overlay.id = 'home-gc-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:3000;display:flex;align-items:flex-end;';
-
-  function render() {
-    const selCount = selected.size;
-    overlay.innerHTML = `
-      <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:80vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,16px);">
-        <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);flex-shrink:0;">
-          <span style="font-weight:700;font-size:15px;color:var(--text);">Nova chamada em grupo</span>
-          <button onclick="document.getElementById('home-gc-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
-        </div>
-        <div style="overflow-y:auto;flex:1;">
-          ${contacts.map(([id, ct]) => {
-            const isSel = selected.has(id);
-            return `<div onclick="homeGCToggle('${id}')" id="hgc-${id}" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);background:${isSel?'rgba(61,214,172,.08)':'transparent'};">
-              <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid ${isSel?'var(--accent)':'var(--border)'};display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${ct.photo?'background-image:url('+ct.photo+');background-size:cover;background-position:center;':''}">
-                ${ct.photo ? '' : (ct.name||'?')[0].toUpperCase()}
-              </div>
-              <div style="flex:1;"><div style="color:var(--text);font-weight:600;">${esc(ct.name)}</div></div>
-              <div style="width:24px;height:24px;border-radius:50%;border:2px solid ${isSel?'var(--accent)':'var(--border)'};background:${isSel?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;font-size:13px;color:#06100D;font-weight:700;">${isSel?'✓':''}</div>
-            </div>`;
-          }).join('')}
-        </div>
-        <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
-          <div style="font-size:12px;color:var(--muted);text-align:center;">${selCount} de 5 selecionados (máx. 5 + você = 6)</div>
-          <div style="display:flex;gap:10px;">
-            <button onclick="homeGCStart(false)" ${selCount<1?'disabled':''} style="flex:1;padding:12px;background:${selCount>=1?'var(--bg3)':'var(--bg)'};border:1.5px solid ${selCount>=1?'var(--accent)':'var(--border)'};border-radius:11px;color:${selCount>=1?'var(--accent)':'var(--muted)'};font-weight:700;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              Só voz
-            </button>
-            <button onclick="homeGCStart(true)" ${selCount<1?'disabled':''} style="flex:1;padding:12px;background:${selCount>=1?'var(--accent)':'var(--bg)'};border:none;border-radius:11px;color:${selCount>=1?'#06100D':'var(--muted)'};font-weight:700;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-              Vídeo
-            </button>
-          </div>
-        </div>
-      </div>`;
-    // re-bind onclick após render
-    contacts.forEach(([id]) => {
-      const el = overlay.querySelector(`#hgc-${id}`);
-      if (el) el.onclick = () => { homeGCToggleAndRender(id, selected, render); };
-    });
-    overlay.querySelector('[onclick^="homeGCStart(false)"]').onclick = () => homeGCStart(false, selected);
-    overlay.querySelector('[onclick^="homeGCStart(true)"]').onclick = () => homeGCStart(true, selected);
-    overlay.querySelector('[onclick^="document.getElementById(\'home-gc-modal\')"]').onclick = () => overlay.remove();
-  }
-
-  render();
-  document.body.appendChild(overlay);
-  // expose for re-render
-  window._homeGCSelected = selected;
-  window._homeGCRender = render;
-}
-
-function homeGCToggleAndRender(id, selected, render) {
-  if (selected.has(id)) selected.delete(id);
-  else if (selected.size < 5) selected.add(id);
-  else { showToast('Máximo 5 convidados (+ você = 6)'); return; }
-  render();
-}
-
-async function homeGCStart(isVideo, selected) {
-  document.getElementById('home-gc-modal')?.remove();
-  if (!selected || selected.size === 0) { showToast('Selecione ao menos 1 pessoa'); return; }
-  if (!S.wsReady) { showToast('Sem conexão'); return; }
-  if (GC.active || CALL.state !== 'idle') { showToast('Já em chamada'); return; }
-
-  GC.isVideo = isVideo;
-  GC.roomId = 'GC_' + rndHex(12).toUpperCase();
-  GC.active = true;
-
-  try {
-    GC.localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:isVideo });
-  } catch(e) {
-    if (isVideo) {
-      try { GC.localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false }); GC.isVideo=false; }
-      catch { showToast('Erro no microfone'); GC.active=false; return; }
-    } else { showToast('Erro no microfone'); GC.active=false; return; }
-  }
-
-  showGCScreen();
-
-  for (const peerId of selected) {
-    send({ type:'GC_INVITE', to:peerId, roomId:GC.roomId, isVideo:GC.isVideo,
-      fromName:S.id.name, fromPhoto:S.id.photo||null, ts:Date.now() });
-    await gcCreatePeer(peerId, true);
-  }
-  document.getElementById('gc-status').textContent = 'Chamando ' + selected.size + ' pessoa(s)...';
-}
-function _getMsgText() {
-  const el = document.getElementById('msg-input');
-  if (!el) return '';
-  // Suporte a contenteditable e textarea
-  return el.value !== undefined ? el.value : el.innerText || '';
-}
-function _setMsgText(text) {
-  const el = document.getElementById('msg-input');
-  if (!el) return;
-  if (el.value !== undefined) el.value = text;
-  else { el.innerText = text; el.dispatchEvent(new Event('input')); }
-}
-
+// ── SEND TEXT ──────────────────────────────────────────
 let typingCooldown=false;
 function onTyping() {
-  const v = _getMsgText();
+  const v=document.getElementById('msg-input').value;
   document.getElementById('send-btn').disabled=!v.trim();
   if(S.currentChat&&!typingCooldown) {
     send({type:'TYPING', to:S.currentChat});
     typingCooldown=true; setTimeout(()=>typingCooldown=false,2000);
   }
 }
-
-// Captura imagens/GIFs injetados pelo Gboard no contenteditable
-function handleMsgInput(e) {
-  const el = document.getElementById('msg-input');
-  if (!el) return;
-  // Gboard injeta <img src="blob:..."> ou <img src="data:..."> no contenteditable
-  const imgs = el.querySelectorAll('img');
-  if (imgs.length > 0) {
-    imgs.forEach(img => {
-      const src = img.src;
-      if (!src) return;
-      if (src.startsWith('data:')) {
-        const parts = src.split(',');
-        const mime = parts[0].split(':')[1].split(';')[0];
-        const b64 = parts[1];
-        sendImageMsg(b64, mime || 'image/png');
-        img.remove();
-      } else if (src.startsWith('blob:')) {
-        fetch(src).then(r => r.blob()).then(blob => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const b64 = reader.result.split(',')[1];
-            sendImageMsg(b64, blob.type || 'image/png');
-          };
-          reader.readAsDataURL(blob);
-          img.remove();
-        }).catch(() => img.remove());
-      }
-    });
-    // Limpa qualquer texto restante após imagem
-    el.innerText = '';
-    document.getElementById('send-btn').disabled = true;
-    return;
-  }
-
-  // dataTransfer para teclados que usam insertContent
-  if (e.dataTransfer?.files?.length) {
-    const file = e.dataTransfer.files[0];
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => sendImageMsg(reader.result.split(',')[1], file.type);
-      reader.readAsDataURL(file);
-      _setMsgText('');
-    }
-  }
-}
-
 function handleMsgKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTextMessage();} }
 
-// Captura imagens/GIFs colados do teclado Android ou Ctrl+V
-function handleMsgPaste(e) {
-  const items = e.clipboardData?.items;
-  if (!items) return;
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      e.preventDefault();
-      const file = item.getAsFile();
-      if (!file) continue;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const b64 = reader.result.split(',')[1];
-        if (item.type === 'image/gif') sendImageMsg(b64, 'image/gif');
-        else sendImageMsg(b64, item.type || 'image/png');
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-  }
-}
-
 function sendTextMessage() {
-  const text = _getMsgText().trim();
+  const input=document.getElementById('msg-input');
+  const text=input.value.trim();
   if(!text||!S.currentChat) return;
-  _setMsgText('');
-  document.getElementById('msg-input').style.height='';
-  document.getElementById('send-btn').disabled=true;
-  if (S.groups[S.currentChat]) { sendGroupMsg(S.currentChat, text, 'text'); return; }
+  // Route to group or 1-to-1
+  if (S.groups[S.currentChat]) { sendGroupMsg(S.currentChat, text, 'text'); input.value=''; input.style.height=''; document.getElementById('send-btn').disabled=true; return; }
   const hId=S.currentChat, c=S.contacts[hId];
   if(!c) return;
   const id=genId(), ts=Date.now();
   const e=enc(text, c.secret);
   const msg={id, from:'me', content:text, ts, status:'sending'};
   pushMsg(hId, msg);
+  input.value=''; input.style.height='';
   document.getElementById('send-btn').disabled=true;
   renderMessages(hId); scrollBottom();
   const sent=send({type:'MSG', to:hId, id, enc:e, ts});
@@ -2866,99 +2075,40 @@ function sendTextMessage() {
 }
 
 // ── SEND IMAGE ─────────────────────────────────────────
-// ── MENU ANEXO ─────────────────────────────────────────
-function showAttachMenu() {
-  // Remove menu existente se aberto
-  const ex = document.getElementById('attach-menu');
-  if (ex) { ex.remove(); return; }
-  const menu = document.createElement('div');
-  menu.id = 'attach-menu';
-  menu.style.cssText = 'position:absolute;bottom:68px;left:10px;background:var(--bg2);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;z-index:200;min-width:170px;box-shadow:0 8px 32px #0008;';
-  menu.innerHTML = `
-    <div onclick="_attachPick('image/*,image/gif')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;border-bottom:1px solid var(--border);">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-      Imagem / GIF
-    </div>
-    <div onclick="_attachPick('.pdf,.doc,.docx,.txt,.zip,.rar,.xlsx,.pptx')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Documento
-    </div>`;
-  // Fecha ao clicar fora
-  setTimeout(() => document.addEventListener('click', function _c(){ menu.remove(); document.removeEventListener('click',_c); }, { once:true }), 50);
-  // Posicionar relativo ao screen-chat
-  const bar = document.querySelector('#screen-chat .input-bar');
-  if (bar) bar.parentElement.style.position = 'relative';
-  document.getElementById('screen-chat').appendChild(menu);
-}
-
-function _attachPick(accept) {
-  document.getElementById('attach-menu')?.remove();
-  const inp = document.getElementById('file-input');
-  inp.accept = accept;
-  inp.value = '';
-  inp.click();
-}
-
-function handleFileSelected(input) {
+function handleImageSelected(input) {
   const file = input.files[0]; if (!file) return;
-  const isImage = file.type.startsWith('image/');
-  const isGif   = file.type === 'image/gif';
-  if (file.size > 20*1024*1024) { showToast('Arquivo muito grande (max 20MB)'); input.value=''; return; }
-
-  if (isImage && !isGif) {
-    // Comprimir JPEG/PNG como antes
-    const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const canvas = document.createElement('canvas');
-      const MAX = 1200; let w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h*MAX/w); w = MAX; }
-        else { w = Math.round(w*MAX/h); h = MAX; }
-      }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-      const b64 = dataUrl.split(',')[1];
-      const origKB = Math.round(file.size/1024), compKB = Math.round(b64.length*0.75/1024);
-      if (origKB > compKB+10) showToast(`Comprimido: ${origKB}KB → ${compKB}KB`);
-      sendImageMsg(b64, 'image/jpeg');
-    };
-    img.onerror = () => { const r=new FileReader(); r.onload=()=>sendImageMsg(r.result.split(',')[1],file.type||'image/jpeg'); r.readAsDataURL(file); };
-    img.src = url;
-  } else {
-    // GIF ou documento — envia como base64 sem compressão
+  if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
+  // Compress before sending
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const canvas = document.createElement('canvas');
+    // Max 1200px on longest side
+    const MAX = 1200;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      if (w > h) { h = Math.round(h * MAX/w); w = MAX; }
+      else { w = Math.round(w * MAX/h); h = MAX; }
+    }
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    // Compress to JPEG quality 0.75
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+    const b64 = dataUrl.split(',')[1];
+    const originalKB = Math.round(file.size/1024);
+    const compressedKB = Math.round(b64.length * 0.75 / 1024);
+    if (originalKB > compressedKB + 10) showToast(`Imagem comprimida: ${originalKB}KB → ${compressedKB}KB`);
+    sendImageMsg(b64, 'image/jpeg');
+  };
+  img.onerror = () => {
+    // Fallback: send as-is
     const reader = new FileReader();
-    reader.onload = () => {
-      const b64 = reader.result.split(',')[1];
-      if (isGif) { sendImageMsg(b64, 'image/gif'); }
-      else        { sendDocMsg(b64, file.type||'application/octet-stream', file.name, file.size); }
-    };
+    reader.onload = () => sendImageMsg(reader.result.split(',')[1], file.type||'image/jpeg');
     reader.readAsDataURL(file);
-  }
+  };
+  img.src = url;
   input.value = '';
-}
-
-function handleImageSelected(input) { handleFileSelected(input); } // compat
-
-function sendDocMsg(b64, mime, fileName, fileSize) {
-  const hId = S.currentChat; if (!hId) return;
-  const kb = Math.round(fileSize/1024);
-  if (kb > 3000) { showToast('Documento muito grande (max ~3MB)'); return; }
-  const id = genId(), ts = Date.now();
-  if (S.groups[hId]) {
-    sendGroupMsg(hId, '', 'doc', { docB64:b64, docMime:mime, docName:fileName, docSize:fileSize });
-    return;
-  }
-  const ct = S.contacts[hId]; if (!ct) return;
-  const e = enc(JSON.stringify({b64, mime, name:fileName, size:fileSize}), ct.secret);
-  const msg = { id, from:'me', content:'', docB64:b64, docMime:mime, docName:fileName, docSize:fileSize, type:'doc', ts, status:'sending' };
-  pushMsg(hId, msg);
-  renderMessages(hId); scrollBottom();
-  const sent = send({ type:'DOC', to:hId, id, enc:e, ts });
-  msg.status = 'queued';
-  if (sent) scheduleAckTimeout(hId, id, 60000);
-  saveDB(); renderMessages(hId);
 }
 
 function sendImageMsg(b64, mime) {
@@ -3111,51 +2261,10 @@ function updateProfileUI() {
   if(!S.id) return;
   const el=document.getElementById('profile-avatar');
   renderAv(el, S.id.name, S.id.photo);
-  el.style.width='110px'; el.style.height='110px'; el.style.fontSize='40px';
+  el.style.width='72px'; el.style.height='72px'; el.style.fontSize='26px';
   document.getElementById('profile-name').textContent=S.id.name;
-  const ph = document.getElementById('profile-hash');
-  if (ph) ph.textContent=S.id.hashId;
-  // PIN rows
-  const hasPIN = !!localStorage.getItem('NX_PIN');
-  const setup = document.getElementById('pin-row-setup');
-  const rem   = document.getElementById('pin-row-remove');
-  if (setup) { setup.style.display = hasPIN ? 'none' : 'flex'; setup.style.borderRadius = hasPIN ? '' : '0 0 12px 12px'; }
-  if (rem)   { rem.style.display   = hasPIN ? 'flex' : 'none'; rem.style.borderRadius   = hasPIN ? '0 0 12px 12px' : ''; }
-}
-function removePinConfirm() {
-  nexoConfirm('Remover o PIN de segurança?', () => {
-    removePin();
-    updateProfileUI();
-  }, null, 'Remover', 'Cancelar', true);
-}
-function toggleHashPanel() {
-  const panel = document.getElementById('hash-panel');
-  const chevron = document.getElementById('hash-chevron');
-  if (!panel) return;
-  const open = panel.style.maxHeight !== '0px' && panel.style.maxHeight !== '';
-  panel.style.maxHeight = open ? '0' : '200px';
-  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
-}
-function startEditName() {
-  document.getElementById('profile-name-row').style.display='none';
-  const row = document.getElementById('profile-name-edit');
-  row.style.display='flex';
-  const inp = document.getElementById('edit-name-input');
-  inp.value = S.id?.name || '';
-  inp.focus();
-  inp.select();
-}
-function cancelEditName() {
-  document.getElementById('profile-name-row').style.display='flex';
-  document.getElementById('profile-name-edit').style.display='none';
-}
-function saveName() {
-  const n = document.getElementById('edit-name-input').value.trim();
-  if (!n) { showToast('Nome não pode ser vazio'); return; }
-  S.id.name = n; saveId(S.id);
-  cancelEditName(); // fecha o campo primeiro
-  updateProfileUI(); updateMyAvatar();
-  showToast('Nome atualizado ✓');
+  document.getElementById('profile-hash').textContent=S.id.hashId;
+  document.getElementById('edit-name-input').value=S.id.name;
 }
 function compressProfilePhoto(file, cb) {
   if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
@@ -3192,6 +2301,10 @@ function changeProfilePhoto(input) {
     showToast('Foto atualizada');
   });
 }
+function saveName() {
+  const n=document.getElementById('edit-name-input').value.trim();
+  if(!n) return; S.id.name=n; saveId(S.id); updateProfileUI(); showToast('Nome atualizado');
+}
 function copyMyHash() {
   const h=S.id?.hashId; if(!h) return;
   if(navigator.clipboard) navigator.clipboard.writeText(h).then(()=>showToast('Hash copiado'));
@@ -3225,16 +2338,7 @@ function confirmDeleteAccount() {
 
 // ── HELPERS ────────────────────────────────────────────
 function pushMsg(hId, msg) { if(!S.convs[hId]) S.convs[hId]=[]; S.convs[hId].push(msg); }
-function autoResize(el) {
-  if (el.tagName === 'TEXTAREA') {
-    el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px';
-  } else {
-    // contenteditable: deixa crescer naturalmente até max-height (definido no CSS)
-    // só precisa atualizar o send-btn
-    const v = el.innerText || el.textContent || '';
-    document.getElementById('send-btn').disabled = !v.trim();
-  }
-}
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
 function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 function fmtTime(ts) {
@@ -3299,19 +2403,6 @@ function showModal(title,sub,actions) {
 function closeModal(e) {
   if(e&&e.target!==document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').classList.remove('show');
-}
-// Substituto dark do confirm() nativo
-function nexoConfirm(msg, onYes, onNo, yesLabel, noLabel, isDanger) {
-  showModal(msg, '', [
-    { label: yesLabel||'Confirmar', style: isDanger?'danger':'primary', action: () => {
-      document.getElementById('modal-overlay').classList.remove('show');
-      if (onYes) onYes();
-    }},
-    { label: noLabel||'Cancelar', style: 'secondary', action: () => {
-      document.getElementById('modal-overlay').classList.remove('show');
-      if (onNo) onNo();
-    }}
-  ]);
 }
 
 // ── AVATAR ────────────────────────────────────────────
@@ -3685,17 +2776,12 @@ function filterEmojis(q) {
 function insertEmoji(e) {
   const inp = document.getElementById('msg-input');
   if (!inp) return;
+  const s = inp.selectionStart, en = inp.selectionEnd;
+  inp.value = inp.value.slice(0,s) + e + inp.value.slice(en);
+  inp.selectionStart = inp.selectionEnd = s + e.length;
   inp.focus();
-  // Para contenteditable, usa execCommand ou insertText
-  if (inp.contentEditable === 'true') {
-    document.execCommand('insertText', false, e);
-  } else {
-    const s = inp.selectionStart, en = inp.selectionEnd;
-    inp.value = inp.value.slice(0,s) + e + inp.value.slice(en);
-    inp.selectionStart = inp.selectionEnd = s + e.length;
-    autoResize(inp);
-  }
-  document.getElementById('send-btn').disabled = !(_getMsgText().trim());
+  document.getElementById('send-btn').disabled = !inp.value.trim();
+  autoResize(inp);
 }
 
 function toggleEmojiPicker() {
@@ -3948,19 +3034,12 @@ async function gcCreatePeer(peerId, isInitiator) {
   return pc;
 }
 
-// Slot assignment: slot 0 = local, slots 1-5 = remote peers (até 6 total)
+// Slot assignment: slot 0 = local, slots 1-3 = remote peers
+// GC.slotMap = { peerId: slotIndex }
 function gcGetFreeSlot() {
   const used = new Set(Object.values(GC.slotMap || {}));
-  for (let i = 1; i <= 5; i++) { if (!used.has(i)) return i; }
-  return -1; // full (6 pessoas)
-}
-
-// Toque no slot vazio durante chamada → abre picker
-function gcSlotTap(slotIdx) {
-  if (!GC.active) return;
-  const slot = document.getElementById('gc-slot-' + slotIdx);
-  if (!slot || !slot.classList.contains('gc-slot-empty')) return;
-  gcShowAddContact();
+  for (let i = 1; i <= 3; i++) { if (!used.has(i)) return i; }
+  return -1; // full
 }
 
 function gcUpdateSlot(slotIdx, peerId, stream) {
@@ -4053,8 +3132,8 @@ function showGCScreen() {
   // Reset slot map
   GC.slotMap = {};
 
-  // Reset slots 1-5 to empty state
-  for (let i = 1; i <= 5; i++) {
+  // Reset slots 1-3 to empty state
+  for (let i = 1; i <= 3; i++) {
     const slot = document.getElementById('gc-slot-' + i);
     if (!slot) continue;
     slot.classList.add('gc-slot-empty');
@@ -4158,7 +3237,7 @@ function gcShowAddContact() {
   });
 
   if (entries.length === 0) { showToast('Nenhum contato disponível para adicionar'); return; }
-  if (Object.keys(GC.peers).length >= 5) { showToast('Máximo de 6 participantes atingido'); return; }
+  if (Object.keys(GC.peers).length >= 3) { showToast('Máximo de 4 participantes atingido'); return; }
 
   // Build modal
   const overlay = document.createElement('div');
@@ -4192,7 +3271,7 @@ function gcShowAddContact() {
 
 function gcInviteContact(hashId) {
   document.getElementById('gc-add-modal')?.remove();
-  if (Object.keys(GC.peers).length >= 5) { showToast('Máximo de 6 participantes'); return; }
+  if (Object.keys(GC.peers).length >= 3) { showToast('Máximo de 4 participantes'); return; }
   const c = S.contacts[hashId];
   if (!c) return;
   send({ type:'GC_INVITE', to:hashId, roomId:GC.roomId, isVideo:GC.isVideo, fromName:S.id.name, fromPhoto:S.id.photo||null, ts:Date.now() });
@@ -4442,32 +3521,20 @@ function requestNotifPermission() {
 
 // ── BOOT ───────────────────────────────────────────────
 (function boot() {
-  try {
-    requestNotifPermission();
-    // Inicializa history state para botão voltar funcionar
-    try { history.replaceState({ screen: 'welcome' }, '', '#welcome'); } catch(e) {}
-    const id = loadId();
-    if (id) {
-      if (!id.deviceId) { id.deviceId = rndHex(8); saveId(id); }
-      S.id = id;
-      try { loadDB(); } catch(e) { console.warn('[boot] loadDB error', e); }
-      try { loadBubbleColors(); } catch(e) {}
-      try { initLock(); } catch(e) {}
-      SS('home');
-      try {
-        initWS(id.serverUrl, () => {
-          for (const [hId, msgs] of Object.entries(S.convs)) {
-            msgs.filter(m => m.from === 'me' && m.status === 'queued').forEach(m => retrySend(hId, m));
-          }
-        });
-      } catch(e) { console.warn('[boot] initWS error', e); }
-      try { updateHomeUI(); } catch(e) {}
-      try { document.getElementById('profile-hash').textContent = id.hashId; } catch(e) {}
-    }
-  } catch(e) {
-    console.error('[boot] fatal error', e);
-    // Tenta mostrar a tela welcome como fallback
-    try { SS('welcome'); } catch(e2) {}
+  requestNotifPermission();
+  const id=loadId();
+  if(id) {
+    if(!id.deviceId) { id.deviceId=rndHex(8); saveId(id); }
+    S.id=id; loadDB(); loadBubbleColors();
+    initLock();
+    SS('home'); initWS(id.serverUrl, ()=>{
+      // On reconnect, retry queued messages
+      for(const [hId,msgs] of Object.entries(S.convs)) {
+        msgs.filter(m=>m.from==='me'&&m.status==='queued').forEach(m=>retrySend(hId,m));
+      }
+    });
+    updateHomeUI();
+    document.getElementById('profile-hash').textContent=id.hashId;
   }
 })();
 </script>
