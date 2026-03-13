@@ -1415,6 +1415,10 @@ function scheduleReconnect() {
 
 function send(pkt) {
   if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+    // Injeta nome do remetente para o servidor usar nas notificações push
+    if (S.id?.name && pkt.type !== 'PING' && pkt.type !== 'REGISTER') {
+      pkt._senderName = S.id.name;
+    }
     S.ws.send(JSON.stringify(pkt));
     return true;
   }
@@ -1432,6 +1436,14 @@ function handlePacket(pkt) {
       for (const [hId, msgs] of Object.entries(S.convs)) {
         msgs.filter(m => m.from==='me' && m.status==='queued').forEach(m => retrySend(hId, m));
       }
+      // Re-envia convites que ficaram na fila (pending_sent)
+      for (const [hId, ct] of Object.entries(S.contacts)) {
+        if (ct.status === 'pending_sent') {
+          send({type:'INVITE', to:hId, fromName:S.id.name, fromPhoto:S.id.photo||null});
+        }
+      }
+      // Inicia Web Push na primeira conexão
+      if (!S._pushInitialized) { S._pushInitialized = true; initWebPush(); }
       break;
 
     case 'INVITE': {
@@ -2202,14 +2214,25 @@ function validateAddForm() {
 function sendInvite() {
   const hash=document.getElementById('add-hash-input').value.trim().toUpperCase();
   const name=document.getElementById('add-name-input').value.trim();
+  if(!hash||!name){showToast('Preencha o hash e o nome');return;}
   if(hash===S.id.hashId){showToast('Nao pode adicionar a si mesmo');return;}
-  if(S.contacts[hash]){showToast('Ja adicionado');return;}
+  if(S.contacts[hash]){
+    const st=S.contacts[hash].status;
+    if(st==='active'){showToast('Contato ja adicionado');return;}
+    if(st==='pending_sent'){showToast('Convite ja enviado — aguardando resposta');return;}
+  }
   S.contacts[hash]={ name, secret:secret(S.id.hashId,hash), addedAt:Date.now(), status:'pending_sent' };
   saveDB();
   const sent=send({type:'INVITE', to:hash, fromName:S.id.name, fromPhoto:S.id.photo||null});
-  document.getElementById('add-status').textContent=sent?'Convite enviado — aguardando aceitacao':'Sem conexao — convite sera enviado ao conectar';
-  document.getElementById('add-status').style.color=sent?'var(--accent)':'var(--muted)';
-  showToast(sent?'Convite enviado':'Convite na fila'); updateConvList();
+  const statusEl=document.getElementById('add-status');
+  if(statusEl){
+    statusEl.textContent=sent?'✓ Convite enviado — aguardando aceitacao':'Sem conexao — convite sera enviado automaticamente ao conectar';
+    statusEl.style.color=sent?'var(--accent)':'var(--muted)';
+  }
+  showToast(sent?'Convite enviado!':'Convite salvo — sera enviado ao conectar');
+  updateConvList();
+  // Volta para home após 1.2s
+  setTimeout(()=>SS('home'), 1200);
 }
 
 function renderInvites() {
