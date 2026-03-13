@@ -1447,11 +1447,15 @@ function handlePacket(pkt) {
       break;
 
     case 'INVITE': {
-      if (S.contacts[from]) return;
+      // Só ignora se já for contato ATIVO — se for pending_sent, aceita o convite
+      const existingContact = S.contacts[from];
+      if (existingContact && existingContact.status === 'active') break;
+
       if (!S.invites.find(i=>i.fromHash===from)) {
         S.invites.push({ fromHash:from, fromName:pkt.fromName||from.slice(0,8), fromPhoto:pkt.fromPhoto||null, ts:Date.now() });
         saveDB(); updateInviteBanner();
         showToast(`Convite de ${pkt.fromName||'alguem'}`);
+        playNotifSound();
       }
       break;
     }
@@ -2255,11 +2259,22 @@ function renderInvites() {
 
 function acceptInvite(idx) {
   const inv=S.invites[idx]; if(!inv) return;
-  S.contacts[inv.fromHash]={ name:inv.fromName||inv.fromHash.slice(0,8), photo:inv.fromPhoto||null, secret:secret(S.id.hashId,inv.fromHash), addedAt:Date.now(), status:'active' };
+  // Se já tinha esse contato como pending_sent (ambos se adicionaram),
+  // preserva o secret derivado e só atualiza status + dados
+  const existing = S.contacts[inv.fromHash];
+  S.contacts[inv.fromHash] = {
+    name: inv.fromName||inv.fromHash.slice(0,8),
+    photo: inv.fromPhoto||null,
+    secret: existing?.secret || secret(S.id.hashId, inv.fromHash),
+    addedAt: existing?.addedAt || Date.now(),
+    status: 'active'
+  };
   S.invites.splice(idx,1); saveDB();
   send({type:'INVITE_ACCEPTED', to:inv.fromHash, fromName:S.id.name, fromPhoto:S.id.photo||null});
-  showToast(`${S.contacts[inv.fromHash].name} adicionado`);
+  showToast(`${S.contacts[inv.fromHash].name} adicionado ✓`);
   updateInviteBanner(); updateConvList(); renderInvites();
+  // Abre a conversa automaticamente após aceitar
+  setTimeout(()=>openChat(inv.fromHash), 400);
 }
 
 function declineInvite(idx) {
