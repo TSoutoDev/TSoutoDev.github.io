@@ -1428,10 +1428,12 @@ function send(pkt) {
 // ── PACKET HANDLER ─────────────────────────────────────
 function handlePacket(pkt) {
   const from = pkt.from;
+  console.log('[PKT]', pkt.type, 'from:', from?.slice(0,8), JSON.stringify(pkt).slice(0,120));
 
   switch(pkt.type) {
 
     case 'REGISTERED':
+      console.log('[REGISTERED] contacts:', JSON.stringify(Object.entries(S.contacts).map(([k,v])=>k.slice(0,8)+':'+v.status)));
       // Flush queued outgoing messages on reconnect
       for (const [hId, msgs] of Object.entries(S.convs)) {
         msgs.filter(m => m.from==='me' && m.status==='queued').forEach(m => retrySend(hId, m));
@@ -1439,6 +1441,7 @@ function handlePacket(pkt) {
       // Re-envia convites que ficaram na fila (pending_sent)
       for (const [hId, ct] of Object.entries(S.contacts)) {
         if (ct.status === 'pending_sent') {
+          console.log('[REGISTERED] re-enviando INVITE para', hId.slice(0,8));
           send({type:'INVITE', to:hId, fromName:S.id.name, fromPhoto:S.id.photo||null});
         }
       }
@@ -1447,20 +1450,28 @@ function handlePacket(pkt) {
       break;
 
     case 'INVITE': {
+      console.log('[INVITE] from:', from?.slice(0,8), 'existing contact:', S.contacts[from]?.status || 'none');
       // Só ignora se já for contato ATIVO — se for pending_sent, aceita o convite
       const existingContact = S.contacts[from];
-      if (existingContact && existingContact.status === 'active') break;
+      if (existingContact && existingContact.status === 'active') {
+        console.log('[INVITE] ignorado — já é contato ativo');
+        break;
+      }
 
       if (!S.invites.find(i=>i.fromHash===from)) {
         S.invites.push({ fromHash:from, fromName:pkt.fromName||from.slice(0,8), fromPhoto:pkt.fromPhoto||null, ts:Date.now() });
         saveDB(); updateInviteBanner();
         showToast(`Convite de ${pkt.fromName||'alguem'}`);
         playNotifSound();
+        console.log('[INVITE] adicionado à lista, total:', S.invites.length);
+      } else {
+        console.log('[INVITE] já estava na lista — ignorando duplicata');
       }
       break;
     }
 
     case 'INVITE_ACCEPTED':
+      console.log('[INVITE_ACCEPTED] from:', from?.slice(0,8), 'contact exists:', !!S.contacts[from], 'status:', S.contacts[from]?.status);
       if (S.contacts[from]) {
         S.contacts[from].status = 'active';
         if (pkt.fromPhoto) S.contacts[from].photo = pkt.fromPhoto;
@@ -1469,6 +1480,12 @@ function handlePacket(pkt) {
         showToast(`${S.contacts[from].name} aceitou`);
         updateConvList();
         (S.convs[from]||[]).filter(m=>m.from==='me'&&m.status==='queued').forEach(m=>retrySend(from,m));
+      } else {
+        console.warn('[INVITE_ACCEPTED] contato NÃO encontrado para', from?.slice(0,8), '— criando agora');
+        // Cria o contato mesmo assim (caso raro onde aceitaram sem estar no mapa)
+        S.contacts[from] = { name: pkt.fromName||from.slice(0,8), photo: pkt.fromPhoto||null, secret: secret(S.id.hashId, from), addedAt: Date.now(), status: 'active' };
+        saveDB(); updateConvList();
+        showToast(`${pkt.fromName||'Contato'} aceitou`);
       }
       break;
 
@@ -2227,7 +2244,9 @@ function sendInvite() {
   }
   S.contacts[hash]={ name, secret:secret(S.id.hashId,hash), addedAt:Date.now(), status:'pending_sent' };
   saveDB();
+  console.log('[sendInvite] enviando INVITE para', hash.slice(0,8), 'wsReady:', S.wsReady, 'ws state:', S.ws?.readyState);
   const sent=send({type:'INVITE', to:hash, fromName:S.id.name, fromPhoto:S.id.photo||null});
+  console.log('[sendInvite] sent:', sent);
   const statusEl=document.getElementById('add-status');
   if(statusEl){
     statusEl.textContent=sent?'✓ Convite enviado — aguardando aceitacao':'Sem conexao — convite sera enviado automaticamente ao conectar';
