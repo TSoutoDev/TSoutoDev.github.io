@@ -625,10 +625,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <button onclick="removePin()" style="flex:1;padding:10px;background:transparent;border:1.5px solid var(--border);border-radius:9px;font-weight:600;color:var(--muted);cursor:pointer;font-size:13px;">Remover PIN</button>
       </div>
     </div>
-    <div class="setting-row" onclick="requestNotifPermission()">
+    <div id="notif-row" class="setting-row" onclick="togglePushNotifications()">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span class="setting-label">Ativar notificacoes</span>
-      <span class="setting-value">›</span>
+      <span class="setting-label">Notificacoes push</span>
+      <span id="notif-status" class="setting-value">›</span>
     </div>
     <div class="section-header" style="color:var(--danger);">Perigo</div>
     <button class="btn-danger" onclick="confirmDeleteAccount()">Apagar conta e todos os dados</button>
@@ -1402,6 +1402,117 @@ function initFCM() {
   });
 }
 
+// ── WEB PUSH (PWA — funciona no Chrome/Android sem APK) ──
+async function initWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('[PUSH] PushManager não suportado');
+    return;
+  }
+  if (!S.id?.serverUrl) return;
+
+  const serverBase = S.id.serverUrl
+    .replace('wss://', 'https://')
+    .replace('ws://', 'http://')
+    .replace(/\/$/, '');
+
+  // Busca chave VAPID do servidor
+  let vapidKey;
+  try {
+    const r = await fetch(serverBase + '/vapid-public-key');
+    if (!r.ok) { console.log('[PUSH] servidor sem rota VAPID'); return; }
+    const j = await r.json();
+    vapidKey = j.key;
+  } catch(e) { console.log('[PUSH] erro ao buscar VAPID:', e.message); return; }
+  if (!vapidKey) { console.log('[PUSH] chave VAPID vazia'); return; }
+
+  // Permissão
+  const perm = Notification.permission;
+  if (perm === 'denied') { console.log('[PUSH] permissão negada'); updateNotifStatusUI(); return; }
+  if (perm !== 'granted') {
+    const result = await Notification.requestPermission();
+    if (result !== 'granted') { console.log('[PUSH] usuário recusou'); updateNotifStatusUI(); return; }
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey)
+      });
+    }
+    // Registra no servidor
+    const resp = await fetch(serverBase + '/push-subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hashId: S.id.hashId, subscription: sub.toJSON() })
+    });
+    if (resp.ok) {
+      S._pushSub = sub;
+      console.log('[PUSH] subscrito com sucesso ✓');
+    } else {
+      console.log('[PUSH] servidor recusou subscription:', resp.status);
+    }
+  } catch(err) {
+    console.log('[PUSH] erro ao subscrever:', err.message);
+  }
+  updateNotifStatusUI();
+}
+
+async function togglePushNotifications() {
+  if (!('Notification' in window)) { showToast('Notificações não suportadas neste browser'); return; }
+  const perm = Notification.permission;
+  if (S._pushSub) {
+    await unsubscribeWebPush();
+    showToast('Notificações desativadas');
+  } else {
+    if (perm === 'denied') {
+      showToast('Permissão bloqueada — habilite nas configurações do Android');
+      return;
+    }
+    await initWebPush();
+    if (S._pushSub) showToast('Notificações ativadas ✓');
+    else showToast('Não foi possível ativar notificações');
+  }
+  updateNotifStatusUI();
+}
+
+function updateNotifStatusUI() {
+  const el = document.getElementById('notif-status');
+  if (!el) return;
+  if (!('Notification' in window)) { el.textContent = 'Não suportado'; el.style.color = 'var(--muted)'; return; }
+  const perm = Notification.permission;
+  if (perm === 'denied') { el.textContent = 'Bloqueado'; el.style.color = 'var(--danger)'; return; }
+  if (S._pushSub) { el.textContent = 'Ativo ✓'; el.style.color = 'var(--accent)'; }
+  else { el.textContent = 'Inativo'; el.style.color = 'var(--muted)'; }
+}
+
+async function unsubscribeWebPush() {
+  if (!S._pushSub) return;
+  try {
+    const serverBase = S.id.serverUrl
+      .replace('wss://', 'https://')
+      .replace('ws://', 'http://')
+      .replace(/\/$/, '');
+    await fetch(serverBase + '/push-subscribe', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hashId: S.id.hashId })
+    });
+    await S._pushSub.unsubscribe();
+  } catch(e) { console.log('[PUSH] erro ao desinscrever:', e.message); }
+  S._pushSub = null;
+  updateNotifStatusUI();
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+}
+
 function scheduleReconnect() {
   clearTimeout(S.wsReconnectTimer);
   // Don't reconnect if app is in background — wait for visibility
@@ -1761,6 +1872,7 @@ function SS(name) {
   if (name==='settings') {
     const el = document.getElementById('server-url-input');
     if (el && S.id) el.value = S.id.serverUrl || '';
+    updateNotifStatusUI();
   }
   if (name==='add') {
     document.getElementById('add-hash-input').value='';
