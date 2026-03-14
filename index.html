@@ -13,55 +13,14 @@
 // ── SERVICE WORKER + PWA INSTALL ──────────────────────
 (function(){
   if ('serviceWorker' in navigator) {
-    const swCode = `
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(
-  caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
-    .then(() => self.clients.claim())
-));
-self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
-
-/* ── Web Push ── */
-self.addEventListener('push', e => {
-  if (!e.data) return;
-  let d = {};
-  try { d = e.data.json(); } catch { d = { title: 'Nexo', body: e.data.text() }; }
-  const opts = {
-    body:    d.body  || 'Nova mensagem',
-    icon:    '/icon-192.png',
-    badge:   '/icon-192.png',
-    tag:     d.tag   || 'nexo-msg',
-    data:    d,
-    vibrate: d.type === 'call' ? [200,100,200,100,400] : [200,100,200],
-    requireInteraction: !!d.requireInteraction,
-    silent: false
-  };
-  e.waitUntil(self.registration.showNotification(d.title || 'Nexo', opts));
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const d = e.notification.data || {};
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const existing = list.find(c => c.url && c.visibilityState);
-      if (existing) {
-        existing.focus();
-        existing.postMessage({ type: 'NOTIF_TAP', from: d.from, notifType: d.type });
-      } else {
-        clients.openWindow('/').then(w => {
-          if (w) w.postMessage({ type: 'NOTIF_TAP', from: d.from, notifType: d.type });
-        });
-      }
-    })
-  );
-});
-`;
-    const swBlob = new Blob([swCode], {type:'application/javascript'});
-    const swUrl = URL.createObjectURL(swBlob);
-    navigator.serviceWorker.register(swUrl, {scope: './'})
+    // sw.js precisa estar na raiz do repositório no GitHub Pages
+    // No preview do Claude (claudeusercontent.com) vai dar 404 — isso é esperado
+    const swPath = '/sw.js';
+    navigator.serviceWorker.register(swPath, {scope: '/'})
       .then(reg => { window._swReg = reg; console.log('[SW] registrado ✓'); })
-      .catch(e => console.log('[SW] erro:', e.message));
+      .catch(() => {
+        // Silencioso — no GitHub Pages vai funcionar; no preview é esperado falhar
+      });
 
     // Recebe mensagem do SW quando usuário toca na notificação
     navigator.serviceWorker.addEventListener('message', e => {
@@ -285,9 +244,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .emoji-grid button{background:none;border:none;font-size:22px;cursor:pointer;padding:4px;border-radius:8px;transition:background .1s;line-height:1;}
 .emoji-grid button:hover{background:var(--bg3);}
 .input-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;padding-bottom:calc(var(--safe-bot) + 10px);background:var(--bg);border-top:1px solid var(--border);flex-shrink:0;}
-.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:21px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;resize:none;max-height:110px;min-height:42px;line-height:1.4;transition:border-color .2s;-webkit-appearance:none;}
+.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:21px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;resize:none;max-height:110px;min-height:42px;line-height:1.4;transition:border-color .2s;-webkit-appearance:none;overflow-y:auto;word-break:break-word;}
 .msg-input:focus{border-color:#3DD6AC35;}
-.msg-input::placeholder{color:var(--muted);}
+.msg-input:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none;}
 .bar-btn{width:42px;height:42px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,border-color .15s;touch-action:none;user-select:none;}
 .bar-btn svg{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .bar-btn:active,.bar-btn.active{background:#3DD6AC20;border-color:var(--accent);}
@@ -480,7 +439,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <h1>Nexo</h1>
     <div style="display:flex;gap:6px;">
       <button class="icon-btn" id="my-avatar-btn" onclick="SS('profile')" style="border-radius:50%;overflow:hidden;"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
-      <button class="icon-btn" onclick="SS('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
   </div>
   <div class="status-row">
@@ -541,14 +499,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
   <div class="input-bar">
     <button class="bar-btn emoji-btn" onclick="toggleEmojiPicker()" title="Emojis" style="font-size:20px;">😊</button>
-    <button class="bar-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Imagem">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+    <button class="bar-btn" id="attach-btn" onclick="showAttachMenu()" title="Anexar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
     </button>
-    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleImageSelected(this)">
+    <input type="file" id="file-input" accept="image/*,image/gif,.pdf,.doc,.docx,.txt,.zip,.rar,.xlsx,.pptx" style="display:none" onchange="handleFileSelected(this)">
     <button class="bar-btn" id="voice-btn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)" title="Segurar para gravar voz">
       <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
-    <textarea id="msg-input" class="msg-input" rows="1" placeholder="Mensagem..." onkeydown="handleMsgKey(event)" oninput="autoResize(this);onTyping()"></textarea>
+    <div id="msg-input" class="msg-input" contenteditable="true"
+      role="textbox" aria-multiline="true"
+      data-placeholder="Mensagem..."
+      onkeydown="handleMsgKey(event)"
+      oninput="autoResize(this);onTyping();handleMsgInput(event)"
+      onpaste="handleMsgPaste(event)"
+      enterkeyhint="send"
+      inputmode="text"></div>
     <button id="send-btn" class="send-btn" onclick="sendTextMessage()" disabled>
       <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
@@ -597,26 +562,70 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button class="back-btn" onclick="SS('home')"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
     <h1>Meu Perfil</h1>
   </div>
-  <div class="settings-content">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 0 8px;">
-      <div id="profile-avatar" class="avatar" onclick="document.getElementById('profile-photo-input').click()" style="width:72px;height:72px;font-size:26px;border-width:2px;cursor:pointer;position:relative;" title="Trocar foto">
-      </div>
+  <div class="settings-content" style="padding-top:0;">
+
+    <!-- Hero: foto + nome -->
+    <div style="display:flex;flex-direction:column;align-items:center;padding:32px 20px 22px;background:linear-gradient(170deg,var(--bg2) 0%,transparent 100%);">
+      <div id="profile-avatar" class="avatar"
+        onclick="document.getElementById('profile-photo-input').click()"
+        style="width:110px;height:110px;font-size:40px;border-width:3px;cursor:pointer;box-shadow:0 6px 28px #000A;transition:transform .15s;"
+        onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform=''" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform=''"
+        title="Trocar foto"></div>
       <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="changeProfilePhoto(this)">
-      <span style="font-size:11px;color:var(--muted);">Toque na foto para alterar</span>
-      <div style="font-size:20px;font-weight:700;" id="profile-name">—</div>
-    </div>
-    <div class="hash-card">
-      <div class="hash-label">Meu Hash — compartilhe para receber contatos</div>
-      <div id="profile-hash" class="hash-value">—</div>
-      <button class="hash-copy-btn" onclick="copyMyHash()"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar Hash</button>
-    </div>
-    <div class="section-header">Editar nome</div>
-    <div class="setting-card">
-      <div style="display:flex;gap:8px;">
-        <input id="edit-name-input" class="input-field" style="flex:1;" type="text" placeholder="Seu apelido" maxlength="30">
-        <button style="background:var(--accent);border:none;border-radius:9px;padding:0 15px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;white-space:nowrap;" onclick="saveName()">Salvar</button>
+      <div style="margin-top:7px;font-size:11px;color:var(--muted);">Toque para alterar foto</div>
+
+      <!-- Nome: mostra texto + lápis; em edição mostra só o campo -->
+      <div id="profile-name-row" style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+        <div id="profile-name" style="font-size:23px;font-weight:700;color:var(--text);">—</div>
+        <button onclick="startEditName()" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:4px;display:flex;align-items:center;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+      </div>
+      <div id="profile-name-edit" style="display:none;align-items:center;gap:8px;margin-top:12px;">
+        <input id="edit-name-input" class="input-field" style="width:190px;text-align:center;font-size:16px;" type="text" placeholder="Seu apelido" maxlength="30"
+          onkeydown="if(event.key==='Enter')saveName()">
+        <button onclick="saveName()" style="background:var(--accent);border:none;border-radius:9px;padding:9px 16px;font-weight:700;color:#06100D;cursor:pointer;font-size:14px;">✓</button>
       </div>
     </div>
+
+    <!-- 3 ações em cards -->
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:0;margin-top:4px;">
+
+      <!-- 1. Hash sanfona -->
+      <div class="setting-row" onclick="toggleHashPanel()" id="hash-row" style="border-radius:12px 12px 0 0;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span class="setting-label">Meu Hash</span>
+        <span id="hash-chevron" style="color:var(--muted);transition:transform .25s;display:inline-block;">›</span>
+      </div>
+      <!-- Painel sanfona do hash -->
+      <div id="hash-panel" style="max-height:0;overflow:hidden;transition:max-height .35s ease;background:var(--bg3);border-left:1px solid var(--border);border-right:1px solid var(--border);">
+        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:12px;color:var(--muted);line-height:1.6;">Seu <strong style="color:var(--text)">Hash</strong> é seu endereço no Nexo. Compartilhe com quem você quer se conectar.</div>
+          <div id="profile-hash" style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--accent);word-break:break-all;line-height:1.7;background:var(--bg2);border-radius:8px;padding:10px 12px;letter-spacing:0.4px;border:1px solid var(--border);">—</div>
+          <button onclick="copyMyHash()" style="background:var(--accent);border:none;border-radius:9px;padding:10px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copiar Hash
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Configurações -->
+      <div class="setting-row" onclick="SS('settings')" style="border-top:1px solid var(--border);">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="setting-label">Configurações</span><span class="setting-value">›</span>
+      </div>
+
+      <!-- 3. PIN -->
+      <div id="pin-row-setup" class="setting-row" onclick="setupPin()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span class="setting-label">Configurar PIN</span><span class="setting-value">›</span>
+      </div>
+      <div id="pin-row-remove" class="setting-row" onclick="removePinConfirm()" style="border-radius:0 0 12px 12px;border-top:1px solid var(--border);display:none;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span class="setting-label" style="color:var(--danger);">Remover PIN</span><span class="setting-value" style="color:var(--danger);">›</span>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -666,14 +675,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="setting-row" onclick="exportBackup()">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span class="setting-label">Exportar backup</span><span class="setting-value">›</span>
-    </div>
-    <div class="section-header">Seguranca do app</div>
-    <div class="setting-card" style="display:flex;flex-direction:column;gap:10px;">
-      <div style="font-size:13px;color:var(--muted);">Proteja o Nexo com PIN de 4 digitos. O app tambem pede autenticacao ao voltar do background.</div>
-      <div style="display:flex;gap:8px;">
-        <button onclick="setupPin()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:9px;font-weight:700;color:#06100D;cursor:pointer;font-size:13px;">Configurar PIN</button>
-        <button onclick="removePin()" style="flex:1;padding:10px;background:transparent;border:1.5px solid var(--border);border-radius:9px;font-weight:600;color:var(--muted);cursor:pointer;font-size:13px;">Remover PIN</button>
-      </div>
     </div>
     <div id="notif-row" class="setting-row" onclick="togglePushNotifications()">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -1048,7 +1049,7 @@ function openGroupChat(gId) {
   document.getElementById('btn-video-call').style.display='none';
   renderMessages(gId);
   document.getElementById('typing-indicator').classList.remove('show');
-  document.getElementById('msg-input').value='';
+  _setMsgText('');
   document.getElementById('send-btn').disabled=true;
   SS('chat');
   updateConvList();
@@ -1668,7 +1669,8 @@ function handlePacket(pkt) {
 
     case 'MSG':
     case 'AUDIO':
-    case 'IMAGE': {
+    case 'IMAGE':
+    case 'DOC': {
       const c = S.contacts[from];
       if (!c || c.status !== 'active') return;
       const plain = dec(pkt.enc, c.secret);
@@ -1679,10 +1681,13 @@ function handlePacket(pkt) {
       } else {
         try { extra = JSON.parse(plain); content = ''; } catch { return; }
       }
+      const isCard = pkt.type==='MSG' && content.startsWith('📇 Contato compartilhado');
       const msg = {
         id: pkt.id, from, content,
         ...(pkt.type==='AUDIO' ? { audioB64:extra.b64, audioMime:extra.mime, duration:extra.dur, type:'audio' } : {}),
         ...(pkt.type==='IMAGE' ? { imgB64:extra.b64, imgMime:extra.mime, type:'image' } : {}),
+        ...(pkt.type==='DOC'   ? { docB64:extra.b64, docMime:extra.mime, docName:extra.name, docSize:extra.size, type:'doc' } : {}),
+        ...(isCard ? { type:'contact_card' } : {}),
         ts: pkt.ts, status:'received'
       };
       if (!S.convs[from]) S.convs[from]=[];
@@ -1691,15 +1696,13 @@ function handlePacket(pkt) {
         if (S.currentChat !== from) {
           S.unread[from] = (S.unread[from]||0)+1;
         } else {
-          // Chat is open — mark as read immediately and send receipt
           msg.status = 'read';
           send({ type:'READ', to:from, id:pkt.id });
         }
         saveDB(); updateConvList();
         if (S.currentChat===from) renderMessages(from);
-        else notifyNewMessage(from, content||'[midia]');
+        else notifyNewMessage(from, content||'[mídia]');
       }
-      // Always ACK delivery
       send({ type:'ACK', to:from, id:pkt.id, status:'delivered' });
       break;
     }
@@ -1917,10 +1920,22 @@ function SS(name) {
     updateNotifStatusUI();
   }
   if (name==='add') {
-    document.getElementById('add-hash-input').value='';
-    document.getElementById('add-name-input').value='';
-    document.getElementById('add-status').textContent='';
-    document.getElementById('send-invite-btn').disabled=true;
+    const prefill=window._addCardPrefill;
+    window._addCardPrefill=null;
+    if(prefill) {
+      setTimeout(()=>{
+        document.getElementById('add-hash-input').value=prefill.hash||'';
+        document.getElementById('add-name-input').value=prefill.name||'';
+        document.getElementById('add-status').textContent='';
+        validateAddForm();
+        showToast('Hash preenchido — toque em Enviar Convite');
+      }, 100);
+    } else {
+      document.getElementById('add-hash-input').value='';
+      document.getElementById('add-name-input').value='';
+      document.getElementById('add-status').textContent='';
+      document.getElementById('send-invite-btn').disabled=true;
+    }
   }
 }
 
@@ -2010,7 +2025,7 @@ function updateInviteBanner() {
 function openChat(hId) {
   S.currentChat=hId; S.unread[hId]=0;
   // Show all call buttons in 1-to-1 chat
-  document.getElementById('btn-group-call').style.display='flex';
+  document.getElementById('btn-group-call').style.display='none';
   document.getElementById('btn-audio-call').style.display='flex';
   document.getElementById('btn-video-call').style.display='flex';
   const c=S.contacts[hId];
@@ -2021,7 +2036,7 @@ function openChat(hId) {
   setChatStatus();
   renderMessages(hId);
   document.getElementById('typing-indicator').classList.remove('show');
-  document.getElementById('msg-input').value='';
+  _setMsgText('');
   document.getElementById('send-btn').disabled=true;
   SS('chat');
   // Send read receipts for unread messages AND mark locally as read
@@ -2073,9 +2088,38 @@ function renderMessages(hId) {
     } else if (m.type==='image') {
       inner=`<div style="position:relative;">
         <img src="data:${m.imgMime};base64,${m.imgB64}" style="max-width:100%;border-radius:10px;display:block;cursor:pointer;" onclick="openImg('${m.id}')" loading="lazy">
-        <button onclick="downloadImg('${m.id}')" style="position:absolute;bottom:6px;right:6px;background:#00000099;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <button onclick="downloadImg('${m.id}')" style="position:absolute;bottom:6px;right:6px;background:#00000099;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
+      </div>${meta}`;
+    } else if (m.type==='doc') {
+      const kb=m.docSize?Math.round(m.docSize/1024)+'KB':'';
+      const ext=(m.docName||'').split('.').pop().toUpperCase().slice(0,5)||'DOC';
+      inner=`<div onclick="downloadDoc('${m.id}')" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:4px 0;">
+        <div style="width:40px;height:40px;border-radius:9px;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--accent);flex-shrink:0;">${ext}</div>
+        <div style="min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${esc(m.docName||'arquivo')}</div>
+          <div style="font-size:11px;color:var(--muted);">${kb} · Toque para baixar</div>
+        </div>
+      </div>${meta}`;
+    } else if (m.type==='contact_card') {
+      const lines=(m.content||'').split('\n');
+      const cName=(lines[1]||'').replace('Nome: ','');
+      const cHash=(lines[2]||'').replace('Hash: ','');
+      const safeHash=cHash.replace(/'/g,"\\'");
+      const safeName=cName.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      const cardBtns=isMe
+        ?`<button onclick="copyToClipboard('${safeHash}')" style="background:none;border:1px solid var(--accent);border-radius:7px;padding:5px 10px;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;width:100%;">📋 Copiar Hash</button>`
+        :`<div style="display:flex;gap:6px;">
+            <button onclick="addContactFromCard('${safeHash}','${safeName}')" style="flex:1;background:var(--accent);border:none;border-radius:7px;padding:6px 10px;color:#06100D;font-size:11px;font-weight:700;cursor:pointer;">➕ Adicionar</button>
+            <button onclick="copyToClipboard('${safeHash}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);font-size:11px;cursor:pointer;">📋</button>
+          </div>`;
+      inner=`<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#06100D;font-weight:800;font-size:14px;flex-shrink:0;">${(cName||'?')[0].toUpperCase()}</div>
+          <div><div style="font-weight:700;font-size:14px;color:var(--text);">${esc(cName)}</div><div style="font-size:10px;color:var(--muted);">📇 Contato compartilhado</div></div>
+        </div>
+        ${cardBtns}
       </div>${meta}`;
     } else {
       inner=esc(m.content)+meta;
@@ -2109,12 +2153,76 @@ function closeImgViewer() { document.getElementById('img-viewer').classList.remo
 
 function downloadImg(msgId) {
   const all=Object.values(S.convs).flat();
-  const m=all.find(x=>x.id===msgId);
-  if(!m?.imgB64) return;
+  const m=all.find(x=>x.id===msgId); if(!m?.imgB64) return;
   const a=document.createElement('a');
   a.href=`data:${m.imgMime||'image/jpeg'};base64,${m.imgB64}`;
-  a.download=`nexo-imagem-${Date.now()}.${(m.imgMime||'image/jpeg').split('/')[1]||'jpg'}`;
+  a.download=`nexo-img-${Date.now()}.${(m.imgMime||'image/jpeg').split('/')[1]||'jpg'}`;
   a.click();
+}
+
+function downloadDoc(msgId) {
+  const all=Object.values(S.convs).flat();
+  const m=all.find(x=>x.id===msgId); if(!m?.docB64) return;
+  const a=document.createElement('a');
+  a.href=`data:${m.docMime||'application/octet-stream'};base64,${m.docB64}`;
+  a.download=m.docName||`nexo-doc-${Date.now()}`;
+  a.click();
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard?.writeText(text).then(()=>showToast('Copiado!')).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=text;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); showToast('Copiado!');
+  });
+}
+
+function addContactFromCard(hash, name) {
+  if(S.contacts[hash]?.status==='active'){openChat(hash);return;}
+  window._addCardPrefill={hash,name};
+  SS('add');
+}
+
+// ── SHARE CONTACT ──────────────────────────────────────
+function showShareContactPicker() {
+  const hId=S.currentChat;
+  if(!hId||S.groups[hId]){showToast('Só disponível em conversas individuais');return;}
+  const options=[
+    {id:S.id.hashId, name:'Você ('+S.id.name+')', photo:S.id.photo},
+    ...Object.entries(S.contacts).filter(([id,ct])=>ct.status==='active'&&id!==hId).map(([id,ct])=>({id,name:ct.name,photo:ct.photo}))
+  ];
+  if(!options.length){showToast('Nenhum contato para compartilhar');return;}
+  const overlay=document.createElement('div');
+  overlay.id='share-contact-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:3000;display:flex;align-items:flex-end;';
+  overlay.innerHTML=`<div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:65vh;overflow-y:auto;padding-bottom:24px;">
+    <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);">
+      <span style="font-weight:700;font-size:15px;">Compartilhar contato</span>
+      <button onclick="document.getElementById('share-contact-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
+    </div>
+    ${options.map(o=>`
+      <div onclick="sendContactCard('${o.id}','${esc(o.name).replace(/'/g,"\\'")}');document.getElementById('share-contact-modal').remove()" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);">
+        <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${o.photo?'background-image:url('+o.photo+');background-size:cover;background-position:center;':''}">
+          ${o.photo?'':(o.name||'?')[0].toUpperCase()}
+        </div>
+        <span style="color:var(--text);font-weight:600;">${esc(o.name)}</span>
+      </div>`).join('')}
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function sendContactCard(contactHash, contactName) {
+  const hId=S.currentChat, ct=S.contacts[hId]; if(!ct) return;
+  const cardText=`📇 Contato compartilhado\nNome: ${contactName}\nHash: ${contactHash}`;
+  const id=genId(), ts=Date.now();
+  const e=enc(cardText, ct.secret);
+  const msg={id, from:'me', content:cardText, ts, status:'sending', type:'contact_card'};
+  pushMsg(hId, msg); renderMessages(hId); scrollBottom();
+  const sent=send({type:'MSG', to:hId, id, enc:e, ts});
+  msg.status='queued';
+  if(sent) scheduleAckTimeout(hId, id);
+  saveDB(); renderMessages(hId);
+  showToast('Contato compartilhado!');
 }
 
 // ── DELETE MESSAGE ─────────────────────────────────────
@@ -2169,26 +2277,45 @@ function _setAudioBtnState(msgId, playing) {
   btn.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
 }
 
-function stopCurrentAudio() {
-  if (_currentAudio) {
-    if (_audioAnimFrame) { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = null; }
-    const id = _currentAudioMsgId;
-    _currentAudio.pause();
-    _currentAudio.currentTime = 0;
-    _currentAudio.onended = null;
-    _currentAudio.onplay = null;
-    _setAudioBtnState(id, false);
-    // Reset progress UI
-    const bar = document.getElementById('apr-' + id);
-    if (bar) bar.style.width = '0%';
-    const wv = document.getElementById('awv-' + id);
-    if (wv) wv.querySelectorAll('span').forEach(sp => sp.classList.remove('played'));
-    // Restore full duration in timer
-    const m = Object.values(S.convs).flat().find(x=>x.id===id);
-    const timer = document.getElementById('adt-' + id);
-    if (timer && m) { const dur=m.duration||0,mm=Math.floor(dur/60),ss=String(dur%60).padStart(2,'0'); timer.textContent=mm+':'+ss; }
-    _currentAudio = null;
-    _currentAudioMsgId = null;
+function stopCurrentAudio(fromEnd) {
+  if (!_currentAudio) return;
+  if (_audioAnimFrame) { cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame = null; }
+  const id = _currentAudioMsgId;
+  const audio = _currentAudio;
+  _currentAudio = null;
+  _currentAudioMsgId = null;
+  audio.onended = null; audio.onplay = null; audio.onerror = null;
+  audio.pause();
+  _setAudioBtnState(id, false);
+
+  const m = Object.values(S.convs).flat().find(x=>x.id===id);
+  const dur = m?.duration||0;
+  const durTxt = Math.floor(dur/60)+':'+String(dur%60).padStart(2,'0');
+
+  if (fromEnd) {
+    // Terminou naturalmente — mostra 0:00 brevemente, depois restaura
+    const bar=document.getElementById('apr-'+id);
+    const wv=document.getElementById('awv-'+id);
+    const timer=document.getElementById('adt-'+id);
+    if(bar) bar.style.width='100%';
+    if(wv) wv.querySelectorAll('span').forEach(sp=>sp.classList.add('played'));
+    if(timer) timer.textContent='0:00';
+    setTimeout(()=>{
+      const b=document.getElementById('apr-'+id);
+      const w=document.getElementById('awv-'+id);
+      const t=document.getElementById('adt-'+id);
+      if(b) b.style.width='0%';
+      if(w) w.querySelectorAll('span').forEach(sp=>sp.classList.remove('played'));
+      if(t) t.textContent=durTxt;
+    }, 1500);
+  } else {
+    // Parado pelo usuário — reseta imediatamente
+    const bar=document.getElementById('apr-'+id);
+    const wv=document.getElementById('awv-'+id);
+    const timer=document.getElementById('adt-'+id);
+    if(bar) bar.style.width='0%';
+    if(wv) wv.querySelectorAll('span').forEach(sp=>sp.classList.remove('played'));
+    if(timer) timer.textContent=durTxt;
   }
 }
 
@@ -2197,59 +2324,78 @@ let _audioAnimFrame = null;
 function _updateAudioProgress() {
   if (!_currentAudio || !_currentAudioMsgId) return;
   const audio = _currentAudio;
-  const dur = audio.duration || 0;
-  const cur = audio.currentTime || 0;
-  const pct = dur > 0 ? (cur / dur) * 100 : 0;
+  const msgId = _currentAudioMsgId;
+  const m = Object.values(S.convs).flat().find(x=>x.id===msgId);
+  const savedDur = m?.duration||0;
+  const dur = (isFinite(audio.duration)&&audio.duration>0) ? audio.duration : savedDur;
+  const cur = Math.min(audio.currentTime||0, dur||0);
+  const pct = dur>0 ? cur/dur : 0;
 
-  const bar = document.getElementById('apr-' + _currentAudioMsgId);
-  if (bar) bar.style.width = pct + '%';
+  const bar=document.getElementById('apr-'+msgId);
+  if(bar) bar.style.width=(pct*100).toFixed(1)+'%';
 
-  // Time display: show elapsed
-  const timer = document.getElementById('adt-' + _currentAudioMsgId);
-  if (timer) {
-    const mm = Math.floor(cur/60), ss = String(Math.floor(cur%60)).padStart(2,'0');
-    timer.textContent = mm + ':' + ss;
+  const timer=document.getElementById('adt-'+msgId);
+  if(timer) {
+    const rem=Math.max(0,(dur||0)-cur);
+    timer.textContent=Math.floor(rem/60)+':'+String(Math.floor(rem%60)).padStart(2,'0');
   }
 
-  // Highlight bars
-  const wv = document.getElementById('awv-' + _currentAudioMsgId);
-  if (wv) {
-    const spans = wv.querySelectorAll('span');
-    const count = spans.length;
-    spans.forEach((sp, i) => sp.classList.toggle('played', i < Math.floor(pct / 100 * count)));
+  const wv=document.getElementById('awv-'+msgId);
+  if(wv) {
+    const spans=wv.querySelectorAll('span');
+    const filled=Math.round(pct*spans.length);
+    spans.forEach((sp,i)=>sp.classList.toggle('played',i<filled));
   }
 
-  if (!audio.paused) _audioAnimFrame = requestAnimationFrame(_updateAudioProgress);
+  if(!audio.paused) _audioAnimFrame=requestAnimationFrame(_updateAudioProgress);
 }
 
 function seekAudio(e, msgId) {
-  if (_currentAudioMsgId !== msgId || !_currentAudio) return;
-  const wv = document.getElementById('awv-' + msgId);
-  if (!wv) return;
-  const rect = wv.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  _currentAudio.currentTime = _currentAudio.duration * pct;
+  if(_currentAudioMsgId!==msgId||!_currentAudio) return;
+  const wv=document.getElementById('awv-'+msgId); if(!wv) return;
+  const rect=wv.getBoundingClientRect();
+  const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+  if(isFinite(_currentAudio.duration)) {
+    _currentAudio.currentTime=_currentAudio.duration*pct;
+    _updateAudioProgress();
+  }
 }
 
-function playAudio(msgId, btn) {
-  if (_currentAudioMsgId === msgId) { stopCurrentAudio(); return; }
+function playAudio(msgId) {
+  if(_currentAudioMsgId===msgId){stopCurrentAudio();return;}
   stopCurrentAudio();
-  const all = Object.values(S.convs).flat();
-  const m = all.find(x => x.id === msgId);
-  if (!m?.audioB64) return;
-  const audio = new Audio(`data:${m.audioMime||'audio/webm'};base64,${m.audioB64}`);
-  _currentAudio = audio;
-  _currentAudioMsgId = msgId;
+  const m=Object.values(S.convs).flat().find(x=>x.id===msgId);
+  if(!m?.audioB64) return;
+  const audio=new Audio(`data:${m.audioMime||'audio/webm'};base64,${m.audioB64}`);
+  _currentAudio=audio;
+  _currentAudioMsgId=msgId;
   _setAudioBtnState(msgId, true);
-  audio.play().catch(() => { stopCurrentAudio(); });
-  audio.onended = () => { stopCurrentAudio(); };
-  audio.onplay = () => { _audioAnimFrame = requestAnimationFrame(_updateAudioProgress); };
+  const bar=document.getElementById('apr-'+msgId);
+  if(bar) bar.style.width='0%';
+  audio.onplay=()=>{ if(_audioAnimFrame) cancelAnimationFrame(_audioAnimFrame); _audioAnimFrame=requestAnimationFrame(_updateAudioProgress); };
+  audio.onpause=()=>{ if(_audioAnimFrame){cancelAnimationFrame(_audioAnimFrame);_audioAnimFrame=null;} };
+  audio.onended=()=>stopCurrentAudio(true);
+  audio.onerror=()=>stopCurrentAudio();
+  audio.play().catch(()=>stopCurrentAudio());
+}
+
+// ── HELPERS MSG-INPUT (contenteditable) ───────────────
+function _getMsgText() {
+  const el=document.getElementById('msg-input');
+  if(!el) return '';
+  return el.innerText||el.textContent||'';
+}
+function _setMsgText(text) {
+  const el=document.getElementById('msg-input');
+  if(!el) return;
+  el.innerText=text;
+  document.getElementById('send-btn').disabled=!text.trim();
 }
 
 // ── SEND TEXT ──────────────────────────────────────────
 let typingCooldown=false;
 function onTyping() {
-  const v=document.getElementById('msg-input').value;
+  const v=_getMsgText();
   document.getElementById('send-btn').disabled=!v.trim();
   if(S.currentChat&&!typingCooldown) {
     send({type:'TYPING', to:S.currentChat});
@@ -2258,64 +2404,141 @@ function onTyping() {
 }
 function handleMsgKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTextMessage();} }
 
+// Captura imagens/GIFs injetados pelo Gboard no contenteditable
+function handleMsgInput(e) {
+  const el=document.getElementById('msg-input');
+  if(!el) return;
+  const imgs=el.querySelectorAll('img');
+  if(imgs.length>0) {
+    imgs.forEach(img=>{
+      const src=img.src; if(!src) return;
+      if(src.startsWith('data:')) {
+        const parts=src.split(','), mime=parts[0].split(':')[1].split(';')[0], b64=parts[1];
+        sendImageMsg(b64, mime||'image/png'); img.remove();
+      } else if(src.startsWith('blob:')) {
+        fetch(src).then(r=>r.blob()).then(blob=>{
+          const reader=new FileReader();
+          reader.onload=()=>{ sendImageMsg(reader.result.split(',')[1], blob.type||'image/png'); };
+          reader.readAsDataURL(blob); img.remove();
+        }).catch(()=>img.remove());
+      }
+    });
+    el.innerText=''; document.getElementById('send-btn').disabled=true; return;
+  }
+  document.getElementById('send-btn').disabled=!_getMsgText().trim();
+}
+
+// Captura paste de imagens
+function handleMsgPaste(e) {
+  const items=e.clipboardData?.items; if(!items) return;
+  for(const item of items) {
+    if(item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file=item.getAsFile(); if(!file) continue;
+      const reader=new FileReader();
+      reader.onload=()=>sendImageMsg(reader.result.split(',')[1], item.type||'image/png');
+      reader.readAsDataURL(file); return;
+    }
+  }
+}
+
 function sendTextMessage() {
-  const input=document.getElementById('msg-input');
-  const text=input.value.trim();
+  const text=_getMsgText().trim();
   if(!text||!S.currentChat) return;
-  // Route to group or 1-to-1
-  if (S.groups[S.currentChat]) { sendGroupMsg(S.currentChat, text, 'text'); input.value=''; input.style.height=''; document.getElementById('send-btn').disabled=true; return; }
-  const hId=S.currentChat, c=S.contacts[hId];
-  if(!c) return;
-  const id=genId(), ts=Date.now();
-  const e=enc(text, c.secret);
-  const msg={id, from:'me', content:text, ts, status:'sending'};
-  pushMsg(hId, msg);
-  input.value=''; input.style.height='';
+  _setMsgText('');
   document.getElementById('send-btn').disabled=true;
+  if(S.groups[S.currentChat]){sendGroupMsg(S.currentChat,text,'text');return;}
+  const hId=S.currentChat, c=S.contacts[hId]; if(!c) return;
+  const id=genId(), ts=Date.now();
+  const e=enc(text,c.secret);
+  const msg={id,from:'me',content:text,ts,status:'sending'};
+  pushMsg(hId,msg);
   renderMessages(hId); scrollBottom();
-  const sent=send({type:'MSG', to:hId, id, enc:e, ts});
-  msg.status = 'queued';
-  if (sent) scheduleAckTimeout(hId, id);
+  const sent=send({type:'MSG',to:hId,id,enc:e,ts});
+  msg.status='queued';
+  if(sent) scheduleAckTimeout(hId,id);
   else showToast('Sem conexao — reenviando automaticamente');
   saveDB(); renderMessages(hId);
 }
 
-// ── SEND IMAGE ─────────────────────────────────────────
-function handleImageSelected(input) {
-  const file = input.files[0]; if (!file) return;
-  if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
-  // Compress before sending
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    URL.revokeObjectURL(url);
-    const canvas = document.createElement('canvas');
-    // Max 1200px on longest side
-    const MAX = 1200;
-    let w = img.width, h = img.height;
-    if (w > MAX || h > MAX) {
-      if (w > h) { h = Math.round(h * MAX/w); w = MAX; }
-      else { w = Math.round(w * MAX/h); h = MAX; }
-    }
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    // Compress to JPEG quality 0.75
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-    const b64 = dataUrl.split(',')[1];
-    const originalKB = Math.round(file.size/1024);
-    const compressedKB = Math.round(b64.length * 0.75 / 1024);
-    if (originalKB > compressedKB + 10) showToast(`Imagem comprimida: ${originalKB}KB → ${compressedKB}KB`);
-    sendImageMsg(b64, 'image/jpeg');
-  };
-  img.onerror = () => {
-    // Fallback: send as-is
-    const reader = new FileReader();
-    reader.onload = () => sendImageMsg(reader.result.split(',')[1], file.type||'image/jpeg');
-    reader.readAsDataURL(file);
-  };
-  img.src = url;
-  input.value = '';
+// ── ATTACH MENU ────────────────────────────────────────
+function showAttachMenu() {
+  const ex=document.getElementById('attach-menu'); if(ex){ex.remove();return;}
+  const menu=document.createElement('div');
+  menu.id='attach-menu';
+  menu.style.cssText='position:absolute;bottom:68px;left:10px;background:var(--bg2);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;z-index:200;min-width:180px;box-shadow:0 8px 32px #0008;';
+  menu.innerHTML=`
+    <div onclick="_attachPick('image/*,image/gif')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;border-bottom:1px solid var(--border);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      Imagem / GIF
+    </div>
+    <div onclick="_attachPick('.pdf,.doc,.docx,.txt,.zip,.rar,.xlsx,.pptx')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;border-bottom:1px solid var(--border);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Documento
+    </div>
+    <div onclick="showShareContactPicker()" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      Compartilhar contato
+    </div>`;
+  setTimeout(()=>document.addEventListener('click',function _c(){menu.remove();document.removeEventListener('click',_c);},{once:true}),50);
+  document.getElementById('screen-chat').appendChild(menu);
 }
+function _attachPick(accept) {
+  document.getElementById('attach-menu')?.remove();
+  const inp=document.getElementById('file-input');
+  inp.accept=accept; inp.value=''; inp.click();
+}
+
+// ── FILE HANDLER (imagem + doc) ────────────────────────
+function handleFileSelected(input) {
+  const file=input.files[0]; if(!file) return;
+  if(file.size>20*1024*1024){showToast('Arquivo muito grande (max 20MB)');input.value='';return;}
+  const isImage=file.type.startsWith('image/');
+  const isGif=file.type==='image/gif';
+  if(isImage&&!isGif) {
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const canvas=document.createElement('canvas');
+      const MAX=1200; let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const b64=canvas.toDataURL('image/jpeg',0.78).split(',')[1];
+      sendImageMsg(b64,'image/jpeg');
+    };
+    img.onerror=()=>{const r=new FileReader();r.onload=()=>sendImageMsg(r.result.split(',')[1],file.type);r.readAsDataURL(file);};
+    img.src=url;
+  } else if(isGif) {
+    const r=new FileReader();
+    r.onload=()=>sendImageMsg(r.result.split(',')[1],'image/gif');
+    r.readAsDataURL(file);
+  } else {
+    const r=new FileReader();
+    r.onload=()=>sendDocMsg(r.result.split(',')[1],file.type||'application/octet-stream',file.name,file.size);
+    r.readAsDataURL(file);
+  }
+  input.value='';
+}
+function handleImageSelected(input){handleFileSelected(input);}
+
+// ── SEND DOC ───────────────────────────────────────────
+function sendDocMsg(b64,mime,fileName,fileSize) {
+  const hId=S.currentChat; if(!hId) return;
+  if(fileSize>4*1024*1024){showToast('Documento muito grande (max ~4MB)');return;}
+  if(S.groups[hId]){sendGroupMsg(hId,'','doc',{docB64:b64,docMime:mime,docName:fileName,docSize:fileSize});return;}
+  const ct=S.contacts[hId]; if(!ct) return;
+  const id=genId(),ts=Date.now();
+  const e=enc(JSON.stringify({b64,mime,name:fileName,size:fileSize}),ct.secret);
+  const msg={id,from:'me',content:'',docB64:b64,docMime:mime,docName:fileName,docSize:fileSize,type:'doc',ts,status:'sending'};
+  pushMsg(hId,msg); renderMessages(hId); scrollBottom();
+  const sent=send({type:'DOC',to:hId,id,enc:e,ts});
+  msg.status='queued';
+  if(sent) scheduleAckTimeout(hId,id,60000);
+  saveDB(); renderMessages(hId);
+}
+
+// ── SEND IMAGE ─────────────────────────────────────────
 
 function sendImageMsg(b64, mime) {
   const hId = S.currentChat;
@@ -2489,10 +2712,46 @@ function updateProfileUI() {
   if(!S.id) return;
   const el=document.getElementById('profile-avatar');
   renderAv(el, S.id.name, S.id.photo);
-  el.style.width='72px'; el.style.height='72px'; el.style.fontSize='26px';
+  el.style.width='110px'; el.style.height='110px'; el.style.fontSize='40px'; el.style.borderWidth='3px';
   document.getElementById('profile-name').textContent=S.id.name;
-  document.getElementById('profile-hash').textContent=S.id.hashId;
-  document.getElementById('edit-name-input').value=S.id.name;
+  const ph=document.getElementById('profile-hash'); if(ph) ph.textContent=S.id.hashId;
+  // PIN rows
+  const hasPIN=!!localStorage.getItem('NX_PIN');
+  const setup=document.getElementById('pin-row-setup');
+  const rem=document.getElementById('pin-row-remove');
+  if(setup){ setup.style.display=hasPIN?'none':'flex'; }
+  if(rem){   rem.style.display=hasPIN?'flex':'none'; }
+}
+function toggleHashPanel() {
+  const panel=document.getElementById('hash-panel');
+  const chevron=document.getElementById('hash-chevron');
+  if(!panel) return;
+  const open=panel.style.maxHeight&&panel.style.maxHeight!=='0px'&&panel.style.maxHeight!=='';
+  panel.style.maxHeight=open?'0':'300px';
+  if(chevron) chevron.style.transform=open?'':'rotate(90deg)';
+}
+function startEditName() {
+  document.getElementById('profile-name-row').style.display='none';
+  const row=document.getElementById('profile-name-edit');
+  row.style.display='flex';
+  const inp=document.getElementById('edit-name-input');
+  inp.value=S.id?.name||'';
+  inp.focus(); inp.select();
+}
+function cancelEditName() {
+  document.getElementById('profile-name-row').style.display='flex';
+  document.getElementById('profile-name-edit').style.display='none';
+}
+function saveName() {
+  const n=document.getElementById('edit-name-input').value.trim();
+  if(!n){showToast('Nome não pode ser vazio');return;}
+  S.id.name=n; saveId(S.id);
+  cancelEditName();
+  updateProfileUI(); updateMyAvatar();
+  showToast('Nome atualizado ✓');
+}
+function removePinConfirm() {
+  nexoConfirm('Remover o PIN de segurança?',()=>{ removePin(); updateProfileUI(); },null,'Remover','Cancelar',true);
 }
 function compressProfilePhoto(file, cb) {
   if (file.size > 10*1024*1024) { showToast('Imagem muito grande (max 10MB)'); return; }
@@ -2529,10 +2788,6 @@ function changeProfilePhoto(input) {
     showToast('Foto atualizada');
   });
 }
-function saveName() {
-  const n=document.getElementById('edit-name-input').value.trim();
-  if(!n) return; S.id.name=n; saveId(S.id); updateProfileUI(); showToast('Nome atualizado');
-}
 function copyMyHash() {
   const h=S.id?.hashId; if(!h) return;
   if(navigator.clipboard) navigator.clipboard.writeText(h).then(()=>showToast('Hash copiado'));
@@ -2566,7 +2821,14 @@ function confirmDeleteAccount() {
 
 // ── HELPERS ────────────────────────────────────────────
 function pushMsg(hId, msg) { if(!S.convs[hId]) S.convs[hId]=[]; S.convs[hId].push(msg); }
-function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
+function autoResize(el) {
+  if(el.tagName==='TEXTAREA'){
+    el.style.height='auto';
+    el.style.height=Math.min(el.scrollHeight,110)+'px';
+  }
+  // contenteditable: o CSS max-height já cuida do limite
+  document.getElementById('send-btn').disabled=!_getMsgText().trim();
+}
 function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 function fmtTime(ts) {
