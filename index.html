@@ -193,7 +193,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .msg-row{display:flex;margin:1px 0;}
 .msg-row.me{justify-content:flex-end;}
 .msg-row.them{justify-content:flex-start;}
-.msg-row.selected .bubble{opacity:0.6;transform:scale(0.97);transition:all .15s;}
+.msg-row.selected .bubble{opacity:0.55;transform:scale(0.97);transition:all .15s;background:#3a1018 !important;border-color:#E85D6A60 !important;filter:grayscale(30%);}
 .delete-bar{position:fixed;bottom:0;left:0;right:0;background:#1a0a0d;border-top:1.5px solid #E85D6A40;padding:14px 20px;padding-bottom:calc(var(--safe-bot) + 14px);display:none;align-items:center;justify-content:space-between;z-index:200;}
 .delete-bar.show{display:flex;}
 .bubble{max-width:78%;padding:9px 13px;border-radius:17px;word-break:break-word;line-height:1.5;font-size:15px;}
@@ -462,9 +462,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       Novo contato
     </div>
-    <div onclick="hideHomeMenu();openNewGroup()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;">
+    <div onclick="hideHomeMenu();openNewGroup()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;border-bottom:1px solid var(--border);">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       Novo grupo
+    </div>
+    <div onclick="hideHomeMenu();startGroupCallFromHome()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px;font-weight:500;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      Chamada em grupo
     </div>
   </div>
 </div>
@@ -498,7 +502,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
   </div>
   <div class="input-bar">
-    <button class="bar-btn emoji-btn" onclick="toggleEmojiPicker()" title="Emojis" style="font-size:20px;">😊</button>
     <button class="bar-btn" id="attach-btn" onclick="showAttachMenu()" title="Anexar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
     </button>
@@ -848,11 +851,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div id="gi-photo" style="width:80px;height:80px;border-radius:50%;background:var(--bg3);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:32px;background-size:cover;background-position:center;"></div>
       <div id="gi-name" style="font-size:20px;font-weight:700;color:var(--text);"></div>
       <div id="gi-count" style="font-size:13px;color:var(--muted);"></div>
+      <div id="gi-role-badge" style="display:none;font-size:11px;font-weight:700;background:#3DD6AC20;color:var(--accent);border:1px solid #3DD6AC40;border-radius:20px;padding:3px 12px;">👑 Administrador</div>
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Membros</div>
     <div id="gi-members" style="display:flex;flex-direction:column;gap:4px;"></div>
-    <div style="margin-top:8px;">
-      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;">+ Adicionar membro</button>
+    <div id="gi-admin-actions" style="display:none;flex-direction:column;gap:8px;margin-top:4px;">
+      <button id="gi-add-btn" onclick="showAddMemberToGroup()" style="width:100%;padding:11px;background:var(--bg3);border:1.5px solid var(--accent);border-radius:10px;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Adicionar membro
+      </button>
     </div>
     <button onclick="leaveGroup()" style="width:100%;padding:11px;background:transparent;border:1.5px solid var(--danger);border-radius:10px;color:var(--danger);font-weight:600;cursor:pointer;font-size:14px;margin-top:4px;">Sair do grupo</button>
   </div>
@@ -922,6 +929,79 @@ function showHomeMenu() {
   if (!isOpen) setTimeout(()=>document.addEventListener('click', _hideMenuOutside, {once:true}), 50);
 }
 function hideHomeMenu() { document.getElementById('home-menu').style.display='none'; }
+
+function startGroupCallFromHome() {
+  const contacts=Object.entries(S.contacts).filter(([,ct])=>ct.status==='active');
+  if(!contacts.length){showToast('Você precisa de ao menos 1 contato ativo');return;}
+  const selected=new Set();
+  const overlay=document.createElement('div');
+  overlay.id='home-gc-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:3000;display:flex;align-items:flex-end;';
+
+  function render() {
+    const n=selected.size;
+    overlay.innerHTML=`<div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:80vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,16px);">
+      <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <span style="font-weight:700;font-size:15px;color:var(--text);">Nova chamada em grupo</span>
+        <button onclick="document.getElementById('home-gc-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;">
+        ${contacts.map(([id,ct])=>{
+          const sel=selected.has(id);
+          return `<div id="hgc-${id}" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);background:${sel?'rgba(61,214,172,.08)':'transparent'};">
+            <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid ${sel?'var(--accent)':'var(--border)'};display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${ct.photo?'background-image:url('+ct.photo+');background-size:cover;background-position:center;':''}">
+              ${ct.photo?'':(ct.name||'?')[0].toUpperCase()}
+            </div>
+            <div style="flex:1;color:var(--text);font-weight:600;">${esc(ct.name)}</div>
+            <div style="width:24px;height:24px;border-radius:50%;border:2px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;font-size:13px;color:#06100D;font-weight:700;">${sel?'✓':''}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
+        <div style="font-size:12px;color:var(--muted);text-align:center;">${n} de 5 selecionados</div>
+        <div style="display:flex;gap:10px;">
+          <button id="hgc-voice" style="flex:1;padding:12px;background:${n>=1?'var(--bg3)':'var(--bg)'};border:1.5px solid ${n>=1?'var(--accent)':'var(--border)'};border-radius:11px;color:${n>=1?'var(--accent)':'var(--muted)'};font-weight:700;cursor:pointer;font-size:14px;">📞 Voz</button>
+          <button id="hgc-video" style="flex:1;padding:12px;background:${n>=1?'var(--accent)':'var(--bg)'};border:none;border-radius:11px;color:${n>=1?'#06100D':'var(--muted)'};font-weight:700;cursor:pointer;font-size:14px;">📹 Vídeo</button>
+        </div>
+      </div>
+    </div>`;
+    // bind cliques
+    contacts.forEach(([id])=>{
+      const el=overlay.querySelector('#hgc-'+id);
+      if(el) el.onclick=()=>{
+        if(selected.has(id)) selected.delete(id);
+        else if(selected.size<5) selected.add(id);
+        else{showToast('Máximo 5 pessoas');return;}
+        render();
+      };
+    });
+    const vBtn=overlay.querySelector('#hgc-voice');
+    const vidBtn=overlay.querySelector('#hgc-video');
+    if(vBtn) vBtn.onclick=()=>{if(n<1){showToast('Selecione ao menos 1');return;}overlay.remove();_homeGCStart(false,selected);};
+    if(vidBtn) vidBtn.onclick=()=>{if(n<1){showToast('Selecione ao menos 1');return;}overlay.remove();_homeGCStart(true,selected);};
+  }
+  render();
+  document.body.appendChild(overlay);
+}
+
+async function _homeGCStart(isVideo, selected) {
+  if(!selected||selected.size===0){showToast('Selecione ao menos 1 pessoa');return;}
+  if(!S.wsReady){showToast('Sem conexão');return;}
+  if(GC.active||CALL.state!=='idle'){showToast('Já em chamada');return;}
+  GC.isVideo=isVideo; GC.roomId='GC_'+rndHex(12).toUpperCase(); GC.active=true;
+  try {
+    GC.localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:isVideo});
+  } catch(e) {
+    if(isVideo){try{GC.localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});GC.isVideo=false;}catch{showToast('Erro no microfone');GC.active=false;return;}}
+    else{showToast('Erro no microfone');GC.active=false;return;}
+  }
+  showGCScreen();
+  for(const peerId of selected){
+    send({type:'GC_INVITE',to:peerId,roomId:GC.roomId,isVideo:GC.isVideo,fromName:S.id.name,fromPhoto:S.id.photo||null,ts:Date.now()});
+    await gcCreatePeer(peerId,true);
+  }
+  document.getElementById('gc-status').textContent='Chamando '+selected.size+' pessoa(s)...';
+}
 function _hideMenuOutside(e) {
   const m=document.getElementById('home-menu'), f=document.getElementById('fab-main');
   if (!m?.contains(e.target) && !f?.contains(e.target)) hideHomeMenu();
@@ -1074,33 +1154,103 @@ function sendGroupMsg(gId, content, type='text', extra={}) {
 }
 
 // ── Group info screen ──────────────────────────────────
+function isGroupAdmin(gId) {
+  const g=S.groups[gId]; if(!g) return false;
+  return (g.admins||[g.createdBy]).includes(S.id.hashId);
+}
+
 function openGroupInfo() {
-  const gId = S.currentChat;
-  const g = S.groups[gId]; if (!g) return;
+  const gId=S.currentChat;
+  const g=S.groups[gId]; if(!g) return;
+  const iAmAdmin=isGroupAdmin(gId);
+  const admins=g.admins||[g.createdBy];
 
-  document.getElementById('gi-name').textContent = g.name;
-  document.getElementById('gi-count').textContent = g.members.length + ' membros';
-  const photo = document.getElementById('gi-photo');
-  if (g.photo) { photo.style.backgroundImage=`url(${g.photo})`; photo.textContent=''; }
-  else { photo.style.backgroundImage=''; photo.textContent='👥'; }
+  document.getElementById('gi-name').textContent=g.name;
+  document.getElementById('gi-count').textContent=g.members.length+' membros';
+  const photo=document.getElementById('gi-photo');
+  if(g.photo){photo.style.backgroundImage=`url(${g.photo})`;photo.textContent='';}
+  else{photo.style.backgroundImage='';photo.textContent='👥';}
 
-  document.getElementById('gi-members').innerHTML = g.members.map(m=>{
-    const isMe = m===S.id.hashId;
-    const name = isMe ? 'Você' : (S.contacts[m]?.name||m.slice(0,8));
-    const photo = isMe ? (S.id.photo||null) : (S.contacts[m]?.photo||null);
+  // Badge admin
+  const badge=document.getElementById('gi-role-badge');
+  if(badge) badge.style.display=iAmAdmin?'inline-block':'none';
+
+  // Botões admin
+  const adminActions=document.getElementById('gi-admin-actions');
+  if(adminActions) adminActions.style.display=iAmAdmin?'flex':'none';
+
+  document.getElementById('gi-members').innerHTML=g.members.map(m=>{
+    const isMe=m===S.id.hashId;
+    const name=isMe?'Você':(S.contacts[m]?.name||m.slice(0,8));
+    const mPhoto=isMe?(S.id.photo||null):(S.contacts[m]?.photo||null);
+    const isAdmin=admins.includes(m);
+    const isCreator=m===g.createdBy;
+    let adminBtns='';
+    if(iAmAdmin&&!isMe) {
+      if(!isAdmin) {
+        adminBtns+=`<button onclick="promoteToAdmin('${gId}','${m}')" style="background:none;border:1px solid var(--accent);border-radius:6px;padding:4px 8px;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">👑 Admin</button>`;
+      } else if(!isCreator && S.id.hashId===g.createdBy) {
+        adminBtns+=`<button onclick="demoteAdmin('${gId}','${m}')" style="background:none;border:1px solid #F9B74F;border-radius:6px;padding:4px 8px;color:#F9B74F;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">⭐ Remover</button>`;
+      }
+      adminBtns+=`<button onclick="removeMemberFromGroup('${gId}','${m}')" style="background:none;border:1px solid var(--danger);border-radius:6px;padding:4px 8px;color:var(--danger);font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;">Remover</button>`;
+    }
     return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${photo?'background-image:url('+photo+');background-size:cover;background-position:center;':''}">
-        ${photo?'':name[0].toUpperCase()}
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0;${mPhoto?'background-image:url('+mPhoto+');background-size:cover;background-position:center;':''}">
+        ${mPhoto?'':name[0].toUpperCase()}
       </div>
-      <div style="flex:1;">
-        <div style="color:var(--text);font-weight:600;">${esc(name)}</div>
-        ${m===g.createdBy?'<div style="font-size:11px;color:var(--accent);">Criador</div>':''}
+      <div style="flex:1;min-width:0;">
+        <div style="color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+        <div style="font-size:11px;color:${isCreator?'var(--accent)':isAdmin?'#F9B74F':'var(--muted)'};">
+          ${isCreator?'👑 Criador':isAdmin?'⭐ Admin':'Membro'}
+        </div>
       </div>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${adminBtns}</div>
     </div>`;
   }).join('');
 
-  document.getElementById('gi-add-btn').style.display = g.createdBy===S.id.hashId ? 'block' : 'none';
+  const addBtn=document.getElementById('gi-add-btn');
+  if(addBtn) addBtn.style.display=iAmAdmin?'flex':'none';
   SS('group-info');
+}
+
+function promoteToAdmin(gId, memberHash) {
+  const g=S.groups[gId]; if(!g||!isGroupAdmin(gId)) return;
+  if(!g.admins) g.admins=[g.createdBy];
+  if(g.admins.includes(memberHash)){showToast('Já é admin');return;}
+  g.admins.push(memberHash); saveDB();
+  const name=S.contacts[memberHash]?.name||memberHash.slice(0,8);
+  g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
+    send({type:'GROUP_MEMBER_ADDED',to:m,groupId:gId,newMemberHash:memberHash,newMemberName:name,action:'promote_admin',admins:g.admins});
+  });
+  showToast(name+' é admin agora!');
+  openGroupInfo();
+}
+
+function demoteAdmin(gId, memberHash) {
+  const g=S.groups[gId]; if(!g||S.id.hashId!==g.createdBy) return;
+  const name=S.contacts[memberHash]?.name||memberHash.slice(0,8);
+  nexoConfirm('Remover privilégio de admin de '+name+'?',()=>{
+    g.admins=g.admins.filter(a=>a!==memberHash); saveDB();
+    g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
+      send({type:'GROUP_MEMBER_ADDED',to:m,groupId:gId,newMemberHash:memberHash,newMemberName:name,action:'demote_admin',admins:g.admins});
+    });
+    showToast(name+' não é mais admin');
+    openGroupInfo();
+  },null,'Remover','Cancelar',true);
+}
+
+function removeMemberFromGroup(gId, memberHash) {
+  const g=S.groups[gId]; if(!g||!isGroupAdmin(gId)) return;
+  const name=S.contacts[memberHash]?.name||memberHash.slice(0,8);
+  nexoConfirm('Remover '+name+' do grupo?',()=>{
+    send({type:'GROUP_MEMBER_LEFT',to:memberHash,groupId:gId,memberHash,kicked:true});
+    g.members.filter(m=>m!==S.id.hashId&&m!==memberHash).forEach(m=>{
+      send({type:'GROUP_MEMBER_LEFT',to:m,groupId:gId,memberHash,memberName:name});
+    });
+    g.members=g.members.filter(m=>m!==memberHash);
+    if(g.admins) g.admins=g.admins.filter(a=>a!==memberHash);
+    saveDB(); showToast(name+' removido'); openGroupInfo();
+  },null,'Remover','Cancelar',true);
 }
 
 function showAddMemberToGroup() {
@@ -1146,12 +1296,13 @@ function addMemberToGroup(hId) {
 
 function leaveGroup() {
   const gId=S.currentChat, g=S.groups[gId]; if(!g) return;
-  if (!confirm('Sair do grupo "'+g.name+'"?')) return;
-  g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
-    send({ type:'GROUP_MEMBER_LEFT', to:m, groupId:gId, memberHash:S.id.hashId });
-  });
-  delete S.groups[gId]; delete S.convs[gId];
-  saveDB(); updateConvList(); SS('home');
+  nexoConfirm('Sair do grupo "'+g.name+'"?',()=>{
+    g.members.filter(m=>m!==S.id.hashId).forEach(m=>{
+      send({type:'GROUP_MEMBER_LEFT',to:m,groupId:gId,memberHash:S.id.hashId});
+    });
+    delete S.groups[gId]; delete S.convs[gId];
+    saveDB(); updateConvList(); SS('home');
+  },null,'Sair','Cancelar',true);
 }
 
 // ── Handle incoming GROUP packets ──────────────────────
@@ -2001,6 +2152,9 @@ function updateConvList() {
     }
     const groupBadge = item.type==='group' ? `<span style="font-size:10px;background:var(--bg3);color:var(--accent);padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;">GRUPO</span>` : '';
     const onclick = item.type==='group' ? `openGroupChat('${item.id}')` : `openChat('${item.id}')`;
+    const shareBtn = item.type==='contact' ? `<button onclick="event.stopPropagation();shareContactHash('${item.id}')" title="Compartilhar contato" style="background:none;border:none;padding:6px;cursor:pointer;color:var(--muted);flex-shrink:0;display:flex;align-items:center;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    </button>` : '';
     return `<div class="conv-item" onclick="${onclick}">
       <div class="avatar" style="${item.photo?'background-image:url('+item.photo+');background-size:cover;background-position:center;background-color:transparent':'background:'+av.bg};border-color:${av.bd}">${item.photo?'':(item.type==='group'?'👥':av.l)}</div>
       <div class="conv-info">
@@ -2010,6 +2164,7 @@ function updateConvList() {
       <div class="conv-meta">
         ${item.last?`<div class="conv-time">${fmtTime(item.last.ts)}</div>`:''}
         ${item.unread>0?`<div class="unread-badge">${item.unread}</div>`:''}
+        ${shareBtn}
       </div>
     </div>`;
   }).join('');
@@ -2128,7 +2283,13 @@ function renderMessages(hId) {
     const isGroup = !!S.groups[hId];
     const senderLabel = (!isMe && isGroup) ? `<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px;">${esc(m.senderName||S.contacts[m.from]?.name||'')}</div>` : '';
     return `${showDate?`<div class="date-sep"><span>${fmtDate(m.ts)}</span></div>`:''}
-    <div class="msg-row ${isMe?'me':'them'}" id="msgrow-${m.id}" oncontextmenu="selectMsg(event,'${hId}','${m.id}')" ontouchstart="startLongPress(event,'${hId}','${m.id}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="bubble">${senderLabel}${inner}</div></div>`;
+    <div class="msg-row ${isMe?'me':'them'}${_selMsgs.has(m.id)?' selected':''}" id="msgrow-${m.id}"
+      oncontextmenu="_enterSelect(event,'${hId}','${m.id}')"
+      ontouchstart="startLongPress(event,'${hId}','${m.id}')"
+      ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
+      onclick="msgTap(event,'${hId}','${m.id}')">
+      <div class="bubble">${senderLabel}${inner}</div>
+    </div>`;
   }).join('');
   if(atBot||msgs.length<=10) scrollBottom();
 }
@@ -2183,6 +2344,53 @@ function addContactFromCard(hash, name) {
   SS('add');
 }
 
+// ── SHARE HASH DO CONTATO (ícone na conv-list) ─────────
+function shareContactHash(contactId) {
+  const ct=S.contacts[contactId]; if(!ct) return;
+  const targets=Object.entries(S.contacts).filter(([id,c])=>c.status==='active'&&id!==contactId);
+  if(!targets.length){showToast('Nenhum contato para receber o hash');return;}
+  const overlay=document.createElement('div');
+  overlay.id='share-hash-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:3000;display:flex;align-items:flex-end;';
+  overlay.innerHTML=`<div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-height:70vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,16px);">
+    <div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div>
+        <div style="font-weight:700;font-size:15px;color:var(--text);">Compartilhar ${esc(ct.name)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">Enviar o hash para um contato</div>
+      </div>
+      <button onclick="document.getElementById('share-hash-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      ${targets.map(([id,c])=>`
+        <div onclick="_doShareHash('${contactId}','${id}')" style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--border);">
+          <div style="width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:16px;flex-shrink:0;${c.photo?'background-image:url('+c.photo+');background-size:cover;background-position:center;':''}">
+            ${c.photo?'':(c.name||'?')[0].toUpperCase()}
+          </div>
+          <div style="color:var(--text);font-weight:600;">${esc(c.name)}</div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function _doShareHash(contactId, targetId) {
+  document.getElementById('share-hash-modal')?.remove();
+  const ct=S.contacts[contactId]; if(!ct) return;
+  const target=S.contacts[targetId]; if(!target) return;
+  const cardText=`📇 Contato compartilhado\nNome: ${ct.name}\nHash: ${contactId}`;
+  const id=genId(), ts=Date.now();
+  const e=enc(cardText, target.secret);
+  const msg={id, from:'me', content:cardText, ts, status:'sending', type:'contact_card'};
+  pushMsg(targetId, msg);
+  if(S.currentChat===targetId){renderMessages(targetId); scrollBottom();}
+  const sent=send({type:'MSG', to:targetId, id, enc:e, ts});
+  msg.status='queued';
+  if(sent) scheduleAckTimeout(targetId, id);
+  saveDB();
+  if(S.currentChat===targetId) renderMessages(targetId);
+  showToast('Hash de '+ct.name+' enviado para '+target.name+'!');
+}
+
 // ── SHARE CONTACT ──────────────────────────────────────
 function showShareContactPicker() {
   const hId=S.currentChat;
@@ -2226,42 +2434,60 @@ function sendContactCard(contactHash, contactName) {
 }
 
 // ── DELETE MESSAGE ─────────────────────────────────────
-let _selectedMsg = null;
 let _longPressTimer = null;
+let _selMsgs = new Set();
+let _selHId  = null;
+let _selMode = false;
 
 function startLongPress(e, hId, msgId) {
-  _longPressTimer = setTimeout(() => { selectMsg(e, hId, msgId); }, 500);
+  _longPressTimer = setTimeout(() => _enterSelect(e, hId, msgId), 500);
 }
 function cancelLongPress() { clearTimeout(_longPressTimer); }
 
-function selectMsg(e, hId, msgId) {
+function _enterSelect(e, hId, msgId) {
   e.preventDefault();
-  clearTimeout(_longPressTimer);
-  // Vibrate for feedback
-  if (navigator.vibrate) navigator.vibrate(40);
-  _selectedMsg = { hId, msgId };
-  // Highlight row
-  document.querySelectorAll('.msg-row.selected').forEach(r=>r.classList.remove('selected'));
-  const row = document.getElementById('msgrow-'+msgId);
-  if (row) row.classList.add('selected');
-  document.getElementById('delete-bar').classList.add('show');
+  if(navigator.vibrate) navigator.vibrate(40);
+  _selMode = true;
+  _selHId  = hId;
+  _selMsgs.clear();
+  _selMsgs.add(msgId);
+  _updateDeleteBar();
+  _refreshSelHighlight();
+}
+
+function msgTap(e, hId, msgId) {
+  if(!_selMode) return;
+  e.stopPropagation();
+  if(_selMsgs.has(msgId)) _selMsgs.delete(msgId);
+  else _selMsgs.add(msgId);
+  if(_selMsgs.size===0){cancelDeleteMsg();return;}
+  _updateDeleteBar();
+  _refreshSelHighlight();
+}
+
+function _updateDeleteBar() {
+  const n=_selMsgs.size;
+  const el=document.getElementById('delete-bar-label');
+  if(el) el.textContent=n+(n===1?' mensagem selecionada':' mensagens selecionadas');
+  document.getElementById('delete-bar').classList.toggle('show', n>0);
+}
+
+function _refreshSelHighlight() {
+  document.querySelectorAll('.msg-row').forEach(r=>{
+    r.classList.toggle('selected', _selMsgs.has(r.id.replace('msgrow-','')));
+  });
 }
 
 function cancelDeleteMsg() {
-  _selectedMsg = null;
+  _selMode=false; _selMsgs.clear(); _selHId=null;
   document.querySelectorAll('.msg-row.selected').forEach(r=>r.classList.remove('selected'));
   document.getElementById('delete-bar').classList.remove('show');
 }
 
 function confirmDeleteMsg() {
-  if (!_selectedMsg) return;
-  const { hId, msgId } = _selectedMsg;
-  if (S.convs[hId]) {
-    S.convs[hId] = S.convs[hId].filter(m => m.id !== msgId);
-    saveDB();
-    renderMessages(hId);
-  }
-  cancelDeleteMsg();
+  const hId=_selHId; if(!hId||!_selMsgs.size) return;
+  if(S.convs[hId]) S.convs[hId]=S.convs[hId].filter(m=>!_selMsgs.has(m.id));
+  saveDB(); cancelDeleteMsg(); renderMessages(hId);
 }
 
 let _currentAudio = null;
